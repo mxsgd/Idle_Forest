@@ -5,7 +5,7 @@ public class PlantPaletteUI : MonoBehaviour
     [SerializeField] private PlantDatabase database;
     [SerializeField] private PlantSelectionModel selection;
     [SerializeField] private PlantPaletteButton buttonPrefab;
-    [SerializeField] private Transform contentParent; // np. GridLayoutGroup
+    [SerializeField] private Transform contentParent;
 
     private void Start()
     {

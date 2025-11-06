@@ -20,20 +20,17 @@ public class TileGrid : MonoBehaviour
     [System.Serializable]
     public class Tile
     {
-        public int i;            // row
-        public int j;            // col
-        public Vector3 worldPos; // środek kafla w świecie
+        public int i;
+        public int j;
+        public Vector3 worldPos;
         public bool occupied;
         public GameObject occupant;
     }
 
-    // public list — do podglądu/debugu
     public List<Tile> tiles = new List<Tile>();
 
-    // szybki dostęp po indeksach (opcjonalnie)
     private Tile[,] _grid;
 
-    // rozmiary w lokalnej przestrzeni mesha
     private Bounds _localBounds;
 
     void OnEnable()
@@ -64,31 +61,26 @@ public class TileGrid : MonoBehaviour
 
         _grid = new Tile[rows, cols];
 
-        // lokalne wymiary podłoża
         var sizeLocal = _localBounds.size;
         var minLocal = _localBounds.min;
 
-        // rozmiar kafla w lokalnej przestrzeni
         float stepX = sizeLocal.x / cols;
         float stepZ = sizeLocal.z / rows;
 
-        // generujemy środki kafli w lokalnej, potem transformujemy do świata
         for (int i = 0; i < rows; i++)
         {
             for (int j = 0; j < cols; j++)
             {
-                // środek kafla w lokalnej
                 float cx = minLocal.x + (j + 0.5f) * stepX;
                 float cz = minLocal.z + (i + 0.5f) * stepZ;
                 Vector3 localCenter = new Vector3(cx, _localBounds.center.y, cz);
 
-                // do świata + „przyklejenie” do powierzchni collidera raycastem od góry
                 Vector3 worldCenter = transform.TransformPoint(localCenter);
                 Vector3 rayStart = worldCenter + transform.up * 5f;
 
                 if (Physics.Raycast(rayStart, -transform.up, out var hit, 20f, ~0, QueryTriggerInteraction.Ignore))
                 {
-                    worldCenter = hit.point; // środek na prawdziwej powierzchni (skalowany/rotowany plane/mesh)
+                    worldCenter = hit.point;
                 }
 
                 var t = new Tile
@@ -111,7 +103,6 @@ public class TileGrid : MonoBehaviour
         tile = null;
         float best = maxDistance;
 
-        // prosta pętla po liście — przy 100–10k kafli jest OK
         for (int k = 0; k < tiles.Count; k++)
         {
             var t = tiles[k];
