@@ -26,14 +26,23 @@ public class PlantPlacer : MonoBehaviour
 
     public void TryPlacePlant(PlantDefinition plant)
     {
-            if (grid.TryGetNearestFreeTile(placementCenter, out var tile, maxSnapDistance))
-            {
-                var go = Instantiate(plant.prefab, tile.worldPos + Vector3.up * yOffset, Quaternion.identity, parentForPlants);
+        if (plant == null || grid == null)
+            return;
 
-            Quaternion baseRot = Quaternion.identity;
-            go.transform.rotation = baseRot;
-                
-                grid.MarkOccupied(tile, go);
-            }
+        if (!grid.TryGetNearestFreeTile(placementCenter, out var tile, maxSnapDistance))
+            return;
+
+        var economy = IdleEconomyManager.Instance;
+        float cost = Mathf.Max(0f, plant.baseCost);
+
+        if (economy == null || !economy.TrySpend(cost))
+            return;
+
+        var go = Instantiate(plant.prefab, tile.worldPos + Vector3.up * yOffset, Quaternion.identity, parentForPlants);
+
+        Quaternion baseRot = Quaternion.identity;
+        go.transform.rotation = baseRot;
+
+        grid.MarkOccupied(tile, go);
     }
 }

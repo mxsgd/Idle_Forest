@@ -100,7 +100,10 @@ public class IdleEconomyManager : MonoBehaviour
             return true;
 
         if (currency < cost)
+        {
+            Debug.Log("Za malo pieniedzy!");
             return false;
+        }
 
         currency -= cost;
         UpdateCurrencyUI();
