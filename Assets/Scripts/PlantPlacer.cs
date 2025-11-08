@@ -48,6 +48,11 @@ public class PlantPlacer : MonoBehaviour
             incomeSource = go.AddComponent<PlantIncome>();
         incomeSource.Initialize(plant);
         
+        var tileObject = go.GetComponent<TileObject>();
+        if (tileObject == null)
+            tileObject = go.AddComponent<TileObject>();
+        tileObject.AssignTile(grid, tile);
+
         grid.MarkOccupied(tile, go);
     }
 }

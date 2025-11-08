@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -11,14 +12,6 @@ public class TileGrid : MonoBehaviour
     [Min(1)] public int cols = 200;
     public bool rebuildOnValidate = true;
 
-    [Header("Gizmos")]
-    public bool drawGizmos = true;
-    public Color tileColor = new Color(0f, 1f, 0.2f, 0.1f);
-    public Color occupiedColor = new Color(1f, 0.2f, 0.2f, 0.35f);
-    public Color centerTileColor = new Color(0.45f, 0.26f, 0.12f, 0.85f);
-    public Color neighborTileColor = Color.white;
-    public float gizmoSize = 0.08f;
-
     [System.Serializable]
     public class Tile
     {
@@ -28,7 +21,9 @@ public class TileGrid : MonoBehaviour
         public int r;
         public Vector3 worldPos;
         public bool occupied;
+        public bool available;
         public GameObject occupant;
+        public GameObject placedPrefab;
         public TileComposition composition = new TileComposition();
 
         public TileDensity Density => composition.GetDensity();
@@ -41,7 +36,9 @@ public class TileGrid : MonoBehaviour
     private Tile[,] _grid;
     private readonly Dictionary<Vector2Int, Tile> _axialLookup = new Dictionary<Vector2Int, Tile>();
     private Tile _centerTile;
-
+    private Tile _selectedTile;
+    public event Action<Tile> SelectedTileChanged;
+    private int _occupiedCount;
     private static readonly Vector2Int[] AxialDirections =
     {
         new Vector2Int(1, 0),
@@ -52,10 +49,10 @@ public class TileGrid : MonoBehaviour
         new Vector2Int(0, 1)
     };
 
-    private static Mesh _hexMesh;
     private float _hexScale = 1f;
-
     private Bounds _localBounds;
+
+    public event Action<Tile> TileStateChanged;
 
     void OnEnable()
     {
@@ -83,7 +80,8 @@ public class TileGrid : MonoBehaviour
         tiles.Clear();
         _axialLookup.Clear();
         _centerTile = null;
-
+        _occupiedCount = 0;
+        
         if (rows < 1 || cols < 1) return;
 
         _grid = new Tile[rows, cols];
@@ -186,13 +184,32 @@ public class TileGrid : MonoBehaviour
     public bool TryGetNearestFreeTile(Vector3 worldPoint, out Tile tile, float maxDistance = Mathf.Infinity)
     {
         tile = null;
+        float bestSqr = maxDistance * maxDistance;
+
+        for (int k = 0; k < tiles.Count; k++)
+        {
+            var t = tiles[k];
+            if (t.occupied)
+                continue;
+
+            float d = Vector3.SqrMagnitude(worldPoint - t.worldPos);
+            if (d < bestSqr)
+            {
+                bestSqr = d;
+                tile = t;
+            }
+        }
+        return tile != null;
+    }
+    //funkcja do wyboru myszka kafelka
+    public bool TryGetNearestTile(Vector3 worldPoint, out Tile tile, float maxDistance = Mathf.Infinity)
+    {
+        tile = null;
         float best = maxDistance;
 
         for (int k = 0; k < tiles.Count; k++)
         {
             var t = tiles[k];
-            if (t.occupied) continue;
-
             float d = Vector3.SqrMagnitude(worldPoint - t.worldPos);
             if (d < best * best)
             {
@@ -200,61 +217,110 @@ public class TileGrid : MonoBehaviour
                 tile = t;
             }
         }
+
         return tile != null;
     }
 
     public void MarkOccupied(Tile tile, GameObject occupant)
     {
         if (tile == null) return;
+        if (!tile.occupied)
+            _occupiedCount++;
+        tile.available = false;
         tile.occupied = true;
         tile.occupant = occupant;
-    }
+        TileStateChanged?.Invoke(tile);
 
+    }
+    // Czy funckja FreeTile jest do czegos na pewno potrzebna?
     public void FreeTile(Tile tile)
     {
         if (tile == null) return;
+        if (tile.occupied && _occupiedCount > 0)
+            _occupiedCount--;
+        tile.available = true;
         tile.occupied = false;
         tile.occupant = null;
     }
 
     public Tile GetTile(int i, int j) => (i >= 0 && i < rows && j >= 0 && j < cols) ? _grid[i, j] : null;
 
-    void OnDrawGizmos()
+    public Tile SelectedTile => _selectedTile;
+
+    public void SetSelectedTile(Tile tile)
     {
-        if (!drawGizmos || tiles == null) return;
+        if (_selectedTile == tile)
+            return;
 
-        EnsureHexMesh();
-
-        var center = _centerTile;
-        var neighbors = center != null ? new HashSet<Tile>(GetNeighbors(center)) : null;
-
-        for (int k = 0; k < tiles.Count; k++)
-        {
-            var t = tiles[k];
-
-            if (t == null) continue;
-
-            if (t.occupied)
-            {
-                Gizmos.color = occupiedColor;
-            }
-            else if (t == center)
-            {
-                Gizmos.color = centerTileColor;
-            }
-            else if (neighbors != null && neighbors.Contains(t))
-            {
-                Gizmos.color = neighborTileColor;
-            }
-            else
-            {
-                Gizmos.color = tileColor;
-            }
-
-            Gizmos.DrawMesh(_hexMesh, t.worldPos, transform.rotation, Vector3.one * _hexScale);
-        }
+        _selectedTile = tile;
+        SelectedTileChanged?.Invoke(_selectedTile);
     }
 
+    public void ClearSelectedTile()
+    {
+        if (_selectedTile == null)
+            return;
+
+        _selectedTile = null;
+        SelectedTileChanged?.Invoke(null);
+    }
+
+    public GameObject PlaceTile(GameObject tilePrefab, Tile tile = null, Transform parent = null, Quaternion rotation = new Quaternion())
+    {
+        if (tilePrefab == null)
+            return null;
+
+        var targetTile = tile ?? GetCenterTile();
+        if (targetTile == null || targetTile.occupied)
+            return null;
+
+        if (rotation.Equals(new Quaternion()))
+            rotation = Quaternion.identity;
+
+        var instance = Instantiate(tilePrefab, targetTile.worldPos, rotation, parent);
+        targetTile.placedPrefab = tilePrefab;
+
+        MarkOccupied(targetTile, instance);
+
+        return instance;
+    }
+    public IEnumerable<Tile> GetAvailableTiles()
+    {
+        if (tiles == null || tiles.Count == 0)
+            yield break;
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            var tile = tiles[i];
+            if (tile != null)
+                tile.available = false;
+        }
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            var tile = tiles[i];
+            if (tile == null || !tile.occupied)
+                continue;
+
+            foreach (var neighbor in GetNeighbors(tile))
+            {
+                if (neighbor == null || neighbor.occupied)
+                    continue;
+
+                neighbor.available = true;
+
+                if (neighbor.placedPrefab == null)
+                    neighbor.placedPrefab = tile.placedPrefab;
+            }
+        }
+
+        for (int i = 0; i < tiles.Count; i++)
+        {
+            var tile = tiles[i];
+            if (tile != null && tile.available && !tile.occupied)
+                yield return tile;
+        }
+    }
     public IEnumerable<Tile> GetNeighbors(Tile tile)
     {
         if (tile == null)
@@ -270,34 +336,6 @@ public class TileGrid : MonoBehaviour
 
     public Tile GetCenterTile() => _centerTile;
 
-    private void EnsureHexMesh()
-    {
-        if (_hexMesh != null)
-            return;
 
-        _hexMesh = new Mesh { name = "TileGridHex" };
-
-        var vertices = new Vector3[7];
-        vertices[0] = Vector3.zero;
-        for (int i = 0; i < 6; i++)
-        {
-            float angle = Mathf.Deg2Rad * (60f * i - 30f);
-            vertices[i + 1] = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-        }
-        
-        var triangles = new int[18];
-        for (int i = 0; i < 6; i++)
-        {
-            int triIndex = i * 3;
-            triangles[triIndex] = 0;
-            triangles[triIndex + 1] = i + 1;
-            triangles[triIndex + 2] = (i + 1) % 6 + 1;
-        }
-
-        _hexMesh.vertices = vertices;
-        _hexMesh.triangles = triangles;
-        _hexMesh.RecalculateNormals();
-        _hexMesh.RecalculateBounds();
-    }
 }
 

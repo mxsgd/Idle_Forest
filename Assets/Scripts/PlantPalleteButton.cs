@@ -9,8 +9,7 @@ public class PlantPaletteButton : MonoBehaviour
     [SerializeField] private TMP_Text price;
     [SerializeField] private Button button;
     [SerializeField] private PlantPlacer plantPlacer;
-
-
+    
     private PlantDefinition _def;
     private PlantSelectionModel _selection;
 
