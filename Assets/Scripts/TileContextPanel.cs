@@ -29,12 +29,6 @@ public class TileContextPanel : MonoBehaviour
         if (panelCanvasGroup == null)
             panelCanvasGroup = GetComponent<CanvasGroup>();
 
-        if (selector == null)
-            selector = FindObjectOfType<TileClickSelector>();
-
-        if (buildController == null)
-            buildController = FindObjectOfType<TileBuildController>();
-
         HidePanel();
     }
 
