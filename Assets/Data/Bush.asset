@@ -17,3 +17,4 @@ MonoBehaviour:
   icon: {fileID: 21300000, guid: 645de6d485fc80642b87608cbcb755e7, type: 3}
   baseCost: 5
   costMultiplier: 1.5
+  incomePerTick: 0.5

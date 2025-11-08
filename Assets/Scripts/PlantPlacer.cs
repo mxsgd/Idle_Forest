@@ -43,6 +43,11 @@ public class PlantPlacer : MonoBehaviour
         Quaternion baseRot = Quaternion.identity;
         go.transform.rotation = baseRot;
 
+        var incomeSource = go.GetComponent<PlantIncome>();
+        if (incomeSource == null)
+            incomeSource = go.AddComponent<PlantIncome>();
+        incomeSource.Initialize(plant);
+        
         grid.MarkOccupied(tile, go);
     }
 }

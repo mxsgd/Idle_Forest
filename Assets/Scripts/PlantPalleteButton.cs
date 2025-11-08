@@ -10,6 +10,7 @@ public class PlantPaletteButton : MonoBehaviour
     [SerializeField] private Button button;
     [SerializeField] private PlantPlacer plantPlacer;
 
+
     private PlantDefinition _def;
     private PlantSelectionModel _selection;
 

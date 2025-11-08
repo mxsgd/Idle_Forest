@@ -8,4 +8,5 @@ public class PlantDefinition : ScriptableObject
     public Sprite icon;
     public int baseCost;
     public float costMultiplier = 1.5f;
+    public float incomePerTick;
 }

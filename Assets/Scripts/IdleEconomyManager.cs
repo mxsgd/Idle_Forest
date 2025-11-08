@@ -5,7 +5,7 @@ using UnityEngine;
 
 public interface IIncomeSource
 {
-    float IncomePerSecond { get; }
+    float IncomePerTick { get; }
 }
 
 public class IdleEconomyManager : MonoBehaviour
@@ -18,7 +18,7 @@ public class IdleEconomyManager : MonoBehaviour
     [SerializeField] private TMP_Text currencyText;
 
     [Header("Income")] 
-    [SerializeField] private float incomeTickInterval = 1f;
+    [SerializeField] private float incomeTickInterval = 0.5f;
 
     private readonly List<IIncomeSource> incomeSources = new();
     private float currency;
@@ -59,15 +59,15 @@ public class IdleEconomyManager : MonoBehaviour
         int ticks = Mathf.FloorToInt(incomeTimer / incomeTickInterval);
         incomeTimer -= ticks * incomeTickInterval;
 
-        float incomePerSecond = 0f;
+        float incomePerTick = 0f;
         for (int i = 0; i < incomeSources.Count; i++)
         {
             if (incomeSources[i] != null)
-                incomePerSecond += Mathf.Max(0f, incomeSources[i].IncomePerSecond);
+                incomePerTick += Mathf.Max(0f, incomeSources[i].IncomePerTick);
         }
 
-        if (incomePerSecond > 0f)
-            AddCurrency(incomePerSecond * incomeTickInterval * ticks);
+        if (incomePerTick > 0f)
+            AddCurrency(incomePerTick * ticks);
     }
 
     public void RegisterIncomeSource(IIncomeSource source)
