@@ -294,6 +294,7 @@ public class TileGrid : MonoBehaviour
         tile.available = true;
         tile.occupied = false;
         tile.occupant = null;
+        TileStateChanged?.Invoke(tile);
     }
 
     public Tile GetTile(int i, int j) => (i >= 0 && i < rows && j >= 0 && j < cols) ? _grid[i, j] : null;
@@ -318,7 +319,7 @@ public class TileGrid : MonoBehaviour
         SelectedTileChanged?.Invoke(null);
     }
 
-    public GameObject PlaceTile(GameObject tilePrefab, Tile tile = null, Transform parent = null, Quaternion? rotation = null, Vector3? positionOffset = null)
+    public GameObject PlaceTile(GameObject tilePrefab, Tile tile = null, Transform parent = null, Quaternion? rotation = null)
     {
         if (tilePrefab == null)
             return null;
@@ -328,7 +329,8 @@ public class TileGrid : MonoBehaviour
             return null;
         var finalParent = parent != null ? parent : transform;
         var finalRotation = rotation ?? Quaternion.identity;
-        var offset = positionOffset ?? Vector3.zero;
+
+        var offset = new Vector3(0f,1f,0f);
 
         var position = targetTile.worldPos + offset;
 
@@ -367,7 +369,13 @@ public class TileGrid : MonoBehaviour
     {
         tile?.RemovePrefab(TilePrefabRole.Occupant);
     }
+    public void NotifyTileChanged(Tile tile)
+    {
+        if (tile == null)
+            return;
 
+        TileStateChanged?.Invoke(tile);
+    }
     private static void ConfigureAvailabilityInstance(GameObject instance, float alpha, string tag)
     {
         if (instance == null)
@@ -399,6 +407,7 @@ public class TileGrid : MonoBehaviour
         }
     }
     
+
     public IEnumerable<Tile> GetAvailableTiles()
     {
         if (tiles == null || tiles.Count == 0)

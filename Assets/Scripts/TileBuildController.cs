@@ -57,6 +57,10 @@ public class TileBuildController : MonoBehaviour
     private readonly Dictionary<TileBuildAction, TileBuildCostSettings> costLookup = new Dictionary<TileBuildAction, TileBuildCostSettings>();
     private readonly HashSet<TileBuildAction> missingCostLogged = new HashSet<TileBuildAction>();
 
+    [Header("Tile expansion cost")]
+    [SerializeField, Min(0f)] private float tileExpansionStartingCost = 1f;
+    [SerializeField, Min(0f)] private float tileExpansionCostMultiplier = 5f;
+
     private static readonly TileBuildAction[] AllActions = (TileBuildAction[])Enum.GetValues(typeof(TileBuildAction));
 
     public struct TileBuildOption
@@ -65,6 +69,9 @@ public class TileBuildController : MonoBehaviour
         public float cost;
         public string reason;
     }
+
+    private readonly HashSet<TileGrid.Tile> expandedTiles = new HashSet<TileGrid.Tile>();
+    private int builtTileCount;
 
     private void OnValidate()
     {
@@ -82,8 +89,25 @@ public class TileBuildController : MonoBehaviour
         CacheCostLookup();
         EnsureCountDictionary();
         RecalculateBuiltCounts();
+        SyncExpandedTiles();
+    }
+    private void OnEnable()
+    {
+        if (grid == null)
+            grid = GetComponent<TileGrid>();
+
+        if (grid != null)
+        {
+            grid.TileStateChanged += HandleTileStateChanged;
+            SyncExpandedTiles();
+        }
     }
 
+    private void OnDisable()
+    {
+        if (grid != null)
+            grid.TileStateChanged -= HandleTileStateChanged;
+    }
     public TileBuildOption GetBuildOption(TileGrid.Tile tile, TileBuildAction action)
     {
         TileBuildOption option;
@@ -127,6 +151,43 @@ public class TileBuildController : MonoBehaviour
         ApplyBuild(tile, action);
         return true;
     }
+
+    public float GetNextTileExpansionCost()
+    {
+        return GetProgressiveCost(tileExpansionStartingCost, tileExpansionCostMultiplier, builtTileCount);
+    }
+
+    public TileBuildOption GetTileExpansionOption()
+    {
+        TileBuildOption option;
+        option.cost = GetNextTileExpansionCost();
+        option.reason = string.Empty;
+        option.canBuild = HasEnoughFunds(option.cost, ref option.reason);
+        return option;
+    }
+
+    public bool TrySpendForTileExpansion(out float cost, out string failureReason)
+    {
+        cost = GetNextTileExpansionCost();
+        failureReason = string.Empty;
+
+        if (!HasEnoughFunds(cost, ref failureReason))
+            return false;
+
+        if (cost <= 0f)
+            return true;
+
+        var targetEconomy = economy != null ? economy : IdleEconomyManager.Instance;
+        if (targetEconomy == null || !targetEconomy.TrySpend(cost))
+        {
+            failureReason = string.IsNullOrEmpty(failureReason) ? "Za mało pieniędzy." : failureReason;
+            return false;
+        }
+
+        economy = targetEconomy;
+        return true;
+    }
+
 
     public bool Evaluate(TileGrid.Tile tile, TileBuildAction action, out float cost, out string failureReason)
     {
@@ -247,6 +308,9 @@ public class TileBuildController : MonoBehaviour
                 IncrementBuiltCount(TileBuildAction.Tree);
                 break;
         }
+        
+        if (grid != null)
+            grid.NotifyTileChanged(tile);
     }
 
     private void EnsureCountDictionary()
@@ -282,6 +346,7 @@ public class TileBuildController : MonoBehaviour
             if (tile.composition.hasTree)
                 builtCounts[TileBuildAction.Tree] += Mathf.Clamp(tile.composition.treeLevel, 1, 3);
         }
+        SyncExpandedTiles();
     }
 
     private int GetBuiltCount(TileBuildAction action)
@@ -308,5 +373,58 @@ public class TileBuildController : MonoBehaviour
             var settings = costSettings[i];
             costLookup[settings.action] = settings;
         }
+    }
+    
+    private void SyncExpandedTiles()
+    {
+        expandedTiles.Clear();
+        builtTileCount = 0;
+
+        if (grid == null || grid.tiles == null)
+            return;
+
+        for (int i = 0; i < grid.tiles.Count; i++)
+        {
+            var tile = grid.tiles[i];
+            if (tile == null || !tile.occupied)
+                continue;
+
+            expandedTiles.Add(tile);
+        }
+
+        builtTileCount = expandedTiles.Count;
+    }
+
+    private void HandleTileStateChanged(TileGrid.Tile tile)
+    {
+        if (tile == null)
+            return;
+
+        if (tile.occupied)
+        {
+            if (expandedTiles.Add(tile))
+                builtTileCount = expandedTiles.Count;
+        }
+        else
+        {
+            if (expandedTiles.Remove(tile))
+                builtTileCount = expandedTiles.Count;
+        }
+    }
+
+    private static float GetProgressiveCost(float startingCost, float multiplier, int builtCount)
+    {
+        float baseCost = Mathf.Max(0f, startingCost);
+        if (builtCount <= 0)
+            return baseCost;
+
+        float appliedMultiplier = Mathf.Max(0f, multiplier);
+        if (Mathf.Approximately(appliedMultiplier, 0f))
+            return 0f;
+
+        if (Mathf.Approximately(appliedMultiplier, 1f))
+            return baseCost;
+
+        return baseCost * Mathf.Pow(appliedMultiplier, builtCount);
     }
 }

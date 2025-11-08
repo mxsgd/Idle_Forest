@@ -1,4 +1,5 @@
 using TMPro;
+using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -29,6 +30,10 @@ public class TileContextPanel : MonoBehaviour
         if (panelCanvasGroup == null)
             panelCanvasGroup = GetComponent<CanvasGroup>();
 
+        if (grassButton != null) grassButton.onClick.AddListener(OnGrassClicked);
+        if (bushButton != null) bushButton.onClick.AddListener(OnBushClicked);
+        if (treeButton != null) treeButton.onClick.AddListener(OnTreeClicked);
+
         HidePanel();
     }
 
@@ -41,10 +46,6 @@ public class TileContextPanel : MonoBehaviour
 
         if (economy != null)
             economy.CurrencyChanged += OnCurrencyChanged;
-
-        if (grassButton != null) grassButton.onClick.AddListener(OnGrassClicked);
-        if (bushButton != null) bushButton.onClick.AddListener(OnBushClicked);
-        if (treeButton != null) treeButton.onClick.AddListener(OnTreeClicked);
     }
 
     private void OnDisable()
@@ -55,12 +56,15 @@ public class TileContextPanel : MonoBehaviour
         if (economy != null)
             economy.CurrencyChanged -= OnCurrencyChanged;
 
+        currentTile = null;
+        HidePanel();
+    }
+
+    private void OnDestroy()
+    {
         if (grassButton != null) grassButton.onClick.RemoveListener(OnGrassClicked);
         if (bushButton != null) bushButton.onClick.RemoveListener(OnBushClicked);
         if (treeButton != null) treeButton.onClick.RemoveListener(OnTreeClicked);
-
-        currentTile = null;
-        HidePanel();
     }
 
     private void OnCurrencyChanged(float _)
@@ -85,6 +89,7 @@ public class TileContextPanel : MonoBehaviour
     private void OnGrassClicked()
     {
         HandleBuild(TileBuildAction.Grass);
+        Debug.Log("ongrassclicked");
     }
 
     private void OnBushClicked()
@@ -104,16 +109,18 @@ public class TileContextPanel : MonoBehaviour
 
         if (buildController.TryBuild(action, currentTile, out var failureReason))
         {
-            if (selector != null)
-                selector.ClearSelection();
-
-            HidePanel();
+            RefreshOptions();
         }
         else if (!string.IsNullOrEmpty(failureReason))
         {
             Debug.LogWarning(failureReason);
             RefreshOptions();
         }
+    }
+    public void RequestBuild(TileBuildAction action)
+    {
+        HandleBuild(action);
+        Debug.Log("request clicked");
     }
 
     private void RefreshOptions()

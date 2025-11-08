@@ -9,7 +9,6 @@ public class GameManager : MonoBehaviour
 
     [Header("Starting Tile")]
     [SerializeField] private bool placeStartingTileOnStart = true;
-    [SerializeField] private float TileYOffset = 0f;
 
     private void Start()
     {
@@ -28,8 +27,7 @@ public class GameManager : MonoBehaviour
 
         Transform parent = startingTileParent != null ? startingTileParent : tileGrid.transform;
         Quaternion rotation = tileGrid.transform.rotation;
-        Vector3 offset = tileGrid.transform.up * TileYOffset;
 
-        tileGrid.PlaceTile(startingTilePrefab, centerTile, parent, rotation, offset);
+        tileGrid.PlaceTile(startingTilePrefab, centerTile, parent, rotation);
     }
 }
