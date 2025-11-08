@@ -2,6 +2,7 @@ using TMPro;
 using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
 
 [RequireComponent(typeof(CanvasGroup))]
 public class TileContextPanel : MonoBehaviour
@@ -30,15 +31,14 @@ public class TileContextPanel : MonoBehaviour
         if (panelCanvasGroup == null)
             panelCanvasGroup = GetComponent<CanvasGroup>();
 
-        if (grassButton != null) grassButton.onClick.AddListener(OnGrassClicked);
-        if (bushButton != null) bushButton.onClick.AddListener(OnBushClicked);
-        if (treeButton != null) treeButton.onClick.AddListener(OnTreeClicked);
+            EnsureDependencies();
 
         HidePanel();
     }
 
     private void OnEnable()
     {
+        EnsureDependencies();
         economy = IdleEconomyManager.Instance;
 
         if (selector != null)
@@ -46,6 +46,10 @@ public class TileContextPanel : MonoBehaviour
 
         if (economy != null)
             economy.CurrencyChanged += OnCurrencyChanged;
+
+        RegisterButton(grassButton, OnGrassClicked);
+        RegisterButton(bushButton, OnBushClicked);
+        RegisterButton(treeButton, OnTreeClicked);
     }
 
     private void OnDisable()
@@ -60,12 +64,6 @@ public class TileContextPanel : MonoBehaviour
         HidePanel();
     }
 
-    private void OnDestroy()
-    {
-        if (grassButton != null) grassButton.onClick.RemoveListener(OnGrassClicked);
-        if (bushButton != null) bushButton.onClick.RemoveListener(OnBushClicked);
-        if (treeButton != null) treeButton.onClick.RemoveListener(OnTreeClicked);
-    }
 
     private void OnCurrencyChanged(float _)
     {
@@ -121,6 +119,36 @@ public class TileContextPanel : MonoBehaviour
     {
         HandleBuild(action);
         Debug.Log("request clicked");
+    }
+    private void EnsureDependencies()
+    {
+        if (selector == null)
+            selector = FindObjectOfType<TileClickSelector>(true);
+
+        if (buildController == null)
+            buildController = FindObjectOfType<TileBuildController>(true);
+    }
+
+    private void RegisterButton(Button button, UnityAction callback)
+    {
+        if (button == null)
+            return;
+
+        if (button.TryGetComponent<TileContextBuildButton>(out _))
+            return;
+
+        button.onClick.AddListener(callback);
+    }
+
+    private void UnregisterButton(Button button, UnityAction callback)
+    {
+        if (button == null)
+            return;
+
+        if (button.TryGetComponent<TileContextBuildButton>(out _))
+            return;
+
+        button.onClick.RemoveListener(callback);
     }
 
     private void RefreshOptions()
