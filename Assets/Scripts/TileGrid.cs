@@ -11,6 +11,11 @@ public class TileGrid : MonoBehaviour
     [Min(1)] public int rows = 200;
     [Min(1)] public int cols = 200;
     public bool rebuildOnValidate = true;
+    public enum TilePrefabRole
+    {
+        Occupant,
+        Availability
+    }
 
     [System.Serializable]
     public class Tile
@@ -24,11 +29,59 @@ public class TileGrid : MonoBehaviour
         public bool available;
         public GameObject occupant;
         public GameObject placedPrefab;
+        public GameObject availabilityVisual;
         public TileComposition composition = new TileComposition();
 
         public TileDensity Density => composition.GetDensity();
         public TileElement DominantElement => composition.GetDominantElement();
         public float Production => composition.GetProduction();
+        
+        public GameObject PlacePrefab(GameObject prefab, Transform parent, Quaternion rotation, Vector3 position, TilePrefabRole role)
+        {
+            if (prefab == null)
+                return null;
+
+            RemovePrefab(role);
+
+            var instance = UnityEngine.Object.Instantiate(prefab, position, rotation, parent);
+
+            switch (role)
+            {
+                case TilePrefabRole.Occupant:
+                    placedPrefab = prefab;
+                    break;
+                case TilePrefabRole.Availability:
+                    availabilityVisual = instance;
+                    break;
+            }
+
+            return instance;
+        }
+
+        public void RemovePrefab(TilePrefabRole role)
+        {
+            GameObject instance = null;
+
+            switch (role)
+            {
+                case TilePrefabRole.Occupant:
+                    instance = occupant;
+                    occupant = null;
+                    break;
+                case TilePrefabRole.Availability:
+                    instance = availabilityVisual;
+                    availabilityVisual = null;
+                    break;
+            }
+
+            if (instance == null)
+                return;
+
+            if (Application.isPlaying)
+                UnityEngine.Object.Destroy(instance);
+            else
+                UnityEngine.Object.DestroyImmediate(instance);
+        }
     }
 
     public List<Tile> tiles = new List<Tile>();
@@ -265,7 +318,7 @@ public class TileGrid : MonoBehaviour
         SelectedTileChanged?.Invoke(null);
     }
 
-    public GameObject PlaceTile(GameObject tilePrefab, Tile tile = null, Transform parent = null, Quaternion rotation = new Quaternion())
+    public GameObject PlaceTile(GameObject tilePrefab, Tile tile = null, Transform parent = null, Quaternion? rotation = null, Vector3? positionOffset = null)
     {
         if (tilePrefab == null)
             return null;
@@ -273,17 +326,79 @@ public class TileGrid : MonoBehaviour
         var targetTile = tile ?? GetCenterTile();
         if (targetTile == null || targetTile.occupied)
             return null;
+        var finalParent = parent != null ? parent : transform;
+        var finalRotation = rotation ?? Quaternion.identity;
+        var offset = positionOffset ?? Vector3.zero;
 
-        if (rotation.Equals(new Quaternion()))
-            rotation = Quaternion.identity;
+        var position = targetTile.worldPos + offset;
 
-        var instance = Instantiate(tilePrefab, targetTile.worldPos, rotation, parent);
-        targetTile.placedPrefab = tilePrefab;
+        RemoveAvailabilityPrefab(targetTile);
 
-        MarkOccupied(targetTile, instance);
+        var instance = targetTile.PlacePrefab(tilePrefab, finalParent, finalRotation, position, TilePrefabRole.Occupant);
+
+        if (instance != null)
+            MarkOccupied(targetTile, instance);
+
+        return instance;
+
+    }
+    public GameObject PlaceAvailabilityPrefab(Tile tile, GameObject prefab, Transform parent, float alpha, string tag)
+    {
+        if (tile == null)
+            return null;
+
+        var template = prefab != null ? prefab : tile.placedPrefab;
+        if (template == null)
+            return null;
+
+        var finalParent = parent != null ? parent : transform;
+        var instance = tile.PlacePrefab(template, finalParent, Quaternion.identity, tile.worldPos + new Vector3(0f,1.0f,0f), TilePrefabRole.Availability);
+        ConfigureAvailabilityInstance(instance, alpha, tag);
 
         return instance;
     }
+    
+    public void RemoveAvailabilityPrefab(Tile tile)
+    {
+        tile?.RemovePrefab(TilePrefabRole.Availability);
+    }
+
+    public void RemoveOccupantPrefab(Tile tile)
+    {
+        tile?.RemovePrefab(TilePrefabRole.Occupant);
+    }
+
+    private static void ConfigureAvailabilityInstance(GameObject instance, float alpha, string tag)
+    {
+        if (instance == null)
+            return;
+
+        instance.name = instance.name.Replace("(Clone)", string.Empty).Trim() + " (Available)";
+
+        if (!string.IsNullOrEmpty(tag))
+            instance.tag = tag;
+
+        foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
+        {
+            var materials = renderer.materials;
+            for (int i = 0; i < materials.Length; i++)
+            {
+                var material = materials[i];
+                if (!material.HasProperty("_Color"))
+                    continue;
+
+                Color color = material.color;
+                color.a = alpha;
+                material.color = color;
+            }
+        }
+
+        foreach (var collider in instance.GetComponentsInChildren<Collider>(true))
+        {
+            collider.enabled = false;
+        }
+    }
+    
     public IEnumerable<Tile> GetAvailableTiles()
     {
         if (tiles == null || tiles.Count == 0)

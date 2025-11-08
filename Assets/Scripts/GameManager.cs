@@ -27,15 +27,9 @@ public class GameManager : MonoBehaviour
             return;
 
         Transform parent = startingTileParent != null ? startingTileParent : tileGrid.transform;
-        GameObject occupant = null;
+        Quaternion rotation = tileGrid.transform.rotation;
+        Vector3 offset = tileGrid.transform.up * TileYOffset;
 
-        if (startingTilePrefab != null)
-        {
-            Vector3 spawnPosition = centerTile.worldPos + tileGrid.transform.up * TileYOffset;
-            Quaternion rotation = tileGrid.transform.rotation;
-            occupant = Instantiate(startingTilePrefab, spawnPosition, rotation, parent);
-        }
-
-        tileGrid.MarkOccupied(centerTile, occupant);
+        tileGrid.PlaceTile(startingTilePrefab, centerTile, parent, rotation, offset);
     }
 }

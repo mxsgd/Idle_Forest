@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 
 public class TileClickSelector : MonoBehaviour
 {
@@ -43,6 +44,7 @@ public class TileClickSelector : MonoBehaviour
         if (RaycastToWorld(screenPosition, out var worldPoint) && grid.TryGetNearestTile(worldPoint, out var tile, maxRayDistance))
         {
             SetSelection(tile);
+            Debug.Log("jest i mycha");
         }
         else
         {
@@ -82,26 +84,14 @@ public class TileClickSelector : MonoBehaviour
 
     private bool TryGetPointerDown(out Vector2 position, out int pointerId)
     {
-        if (Input.touchCount > 0)
-        {
-            for (int i = 0; i < Input.touchCount; i++)
-            {
-                var touch = Input.GetTouch(i);
-                if (touch.phase == TouchPhase.Began)
-                {
-                    position = touch.position;
-                    pointerId = touch.fingerId;
-                    return true;
-                }
-            }
-        }
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            position = Input.mousePosition;
-            pointerId = -1;
+        if (TryGetTouchDown(out position, out pointerId))
             return true;
-        }
+
+        if (TryGetMouseDown(out position, out pointerId))
+            return true;
+
+        if (TryGetPenDown(out position, out pointerId))
+            return true;
 
         position = default;
         pointerId = -1;
@@ -120,5 +110,57 @@ public class TileClickSelector : MonoBehaviour
 
         worldPoint = default;
         return false;
+    }
+
+    private static bool TryGetTouchDown(out Vector2 position, out int pointerId)
+    {
+        position = default;
+        pointerId = -1;
+
+        var touchscreen = Touchscreen.current;
+        if (touchscreen == null)
+            return false;
+
+        foreach (var touch in touchscreen.touches)
+        {
+            if (!touch.press.wasPressedThisFrame)
+                continue;
+
+            position = touch.position.ReadValue();
+
+            var touchId = touch.touchId.ReadValue();
+            pointerId = -1;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetMouseDown(out Vector2 position, out int pointerId)
+    {
+        position = default;
+        pointerId = -1;
+
+        var mouse = Mouse.current;
+        if (mouse == null || !mouse.leftButton.wasPressedThisFrame)
+            return false;
+
+        position = mouse.position.ReadValue();
+        pointerId = -1;
+        return true;
+    }
+
+    private static bool TryGetPenDown(out Vector2 position, out int pointerId)
+    {
+        position = default;
+        pointerId = -1;
+
+        var pen = Pen.current;
+        if (pen == null || !pen.tip.wasPressedThisFrame)
+            return false;
+
+        position = pen.position.ReadValue();
+        pointerId = -1;
+        return true;
     }
 }

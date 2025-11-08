@@ -71,13 +71,9 @@ public class TileAvailabilityVisualizer : MonoBehaviour
             if (_availableTiles.ContainsKey(tile))
                 continue;
 
-            var prefab = tile.placedPrefab != null ? tile.placedPrefab : fallbackAvailableTilePrefab;
-            if (prefab == null)
-                continue;
-
-            var instance = Instantiate(prefab, tile.worldPos, Quaternion.identity, availableTileParent);
-            ConfigureAvailableTile(instance);
-            _availableTiles.Add(tile, instance);
+            var instance = tileGrid.PlaceAvailabilityPrefab(tile, fallbackAvailableTilePrefab, availableTileParent, availableAlpha, availableTag);
+            if (instance != null)
+                _availableTiles.Add(tile, instance);
         }
 
         RemoveStaleAvailableTiles(currentlyAvailable);
@@ -90,13 +86,8 @@ public class TileAvailabilityVisualizer : MonoBehaviour
             if (kvp.Key != null)
                 kvp.Key.available = false;
 
-            if (kvp.Value == null)
-                continue;
-
-            if (Application.isPlaying)
-                Destroy(kvp.Value);
-            else
-                DestroyImmediate(kvp.Value);
+            if (tileGrid != null)
+                tileGrid.RemoveAvailabilityPrefab(kvp.Key);
         }
 
         _availableTiles.Clear();
@@ -123,50 +114,17 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private void RemoveAvailableTile(TileGrid.Tile tile)
     {
-        if (_availableTiles.TryGetValue(tile, out var instance))
+        if (_availableTiles.ContainsKey(tile))
         {
             tile.available = false;
 
-            if (instance != null)
-            {
-                if (Application.isPlaying)
-                    Destroy(instance);
-                else
-                    DestroyImmediate(instance);
-            }
+            if (tileGrid != null)
+                tileGrid.RemoveAvailabilityPrefab(tile);
+
 
             _availableTiles.Remove(tile);
         }
     }
 
-    private void ConfigureAvailableTile(GameObject instance)
-    {
-        if (instance == null)
-            return;
 
-        instance.name = instance.name.Replace("(Clone)", string.Empty).Trim() + " (Available)";
-
-        if (!string.IsNullOrEmpty(availableTag))
-            instance.tag = availableTag;
-
-        foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
-        {
-            var materials = renderer.materials;
-            for (int i = 0; i < materials.Length; i++)
-            {
-                var material = materials[i];
-                if (!material.HasProperty("_Color"))
-                    continue;
-
-                Color color = material.color;
-                color.a = availableAlpha;
-                material.color = color;
-            }
-        }
-
-        foreach (var collider in instance.GetComponentsInChildren<Collider>(true))
-        {
-            collider.enabled = false;
-        }
-    }
 }
