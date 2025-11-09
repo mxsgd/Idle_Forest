@@ -11,9 +11,11 @@ public enum TileBuildAction
 
 public class TileBuildController : MonoBehaviour
 {
+    [Header("Context")]
     [SerializeField] private TileGrid grid;
+    [SerializeField] private TileSelectionModel selection;
+    [SerializeField] private TileRuntimeStore runtime;
     [SerializeField] private IdleEconomyManager economy;
-
     [Serializable]
     public struct TileBuildCostSettings
     {
@@ -31,17 +33,12 @@ public class TileBuildController : MonoBehaviour
         public float GetCostForNext(int builtCount)
         {
             float baseCost = Mathf.Max(0f, startingCost);
-            if (builtCount <= 0)
-                return baseCost;
+            if (builtCount <= 0) return baseCost;
 
-            float multiplier = Mathf.Max(0f, costMultiplier);
-            if (Mathf.Approximately(multiplier, 0f))
-                return 0f;
-
-            if (Mathf.Approximately(multiplier, 1f))
-                return baseCost;
-
-            return baseCost * Mathf.Pow(multiplier, builtCount);
+            float mult = Mathf.Max(0f, costMultiplier);
+            if (Mathf.Approximately(mult, 0f)) return 0f;
+            if (Mathf.Approximately(mult, 1f)) return baseCost;
+            return baseCost * Mathf.Pow(mult, builtCount);
         }
     }
 
@@ -49,13 +46,13 @@ public class TileBuildController : MonoBehaviour
     [SerializeField] private TileBuildCostSettings[] costSettings =
     {
         new TileBuildCostSettings(TileBuildAction.Grass, 0f, 1f),
-        new TileBuildCostSettings(TileBuildAction.Bush, 0f, 1f),
-        new TileBuildCostSettings(TileBuildAction.Tree, 0f, 1f)
+        new TileBuildCostSettings(TileBuildAction.Bush,  0f, 1f),
+        new TileBuildCostSettings(TileBuildAction.Tree,  0f, 1f),
     };
 
-    private readonly Dictionary<TileBuildAction, int> builtCounts = new Dictionary<TileBuildAction, int>();
-    private readonly Dictionary<TileBuildAction, TileBuildCostSettings> costLookup = new Dictionary<TileBuildAction, TileBuildCostSettings>();
-    private readonly HashSet<TileBuildAction> missingCostLogged = new HashSet<TileBuildAction>();
+    private readonly Dictionary<TileBuildAction, int> builtCounts = new();
+    private readonly Dictionary<TileBuildAction, TileBuildCostSettings> costLookup = new();
+    private readonly HashSet<TileBuildAction> missingCostLogged = new();
 
     [Header("Tile expansion cost")]
     [SerializeField, Min(0f)] private float tileExpansionStartingCost = 1f;
@@ -70,57 +67,47 @@ public class TileBuildController : MonoBehaviour
         public string reason;
     }
 
-    private readonly HashSet<TileGrid.Tile> expandedTiles = new HashSet<TileGrid.Tile>();
-    private int builtTileCount;
+    // Event informujący inne systemy (UI/telemetria) o zastosowaniu budowy
+    public event Action<TileGrid.Tile, TileBuildAction> BuildApplied;
+
+    private void Awake()
+    {
+        if (!grid) grid = FindAnyObjectByType<TileGrid>();
+        if (!selection) selection = FindAnyObjectByType<TileSelectionModel>();
+        if (!runtime) runtime = FindAnyObjectByType<TileRuntimeStore>();
+        if (!economy) economy = IdleEconomyManager.Instance;
+
+        CacheCostLookup();
+        EnsureCountDictionary();
+        RecalculateBuiltCounts();
+    }
 
     private void OnValidate()
     {
         CacheCostLookup();
     }
 
-    private void Awake()
-    {
-        if (grid == null)
-            grid = GetComponent<TileGrid>();
+    // ---------- Public API ----------
 
-        if (economy == null)
-            economy = IdleEconomyManager.Instance;
-
-        CacheCostLookup();
-        EnsureCountDictionary();
-        RecalculateBuiltCounts();
-        SyncExpandedTiles();
-    }
-    private void OnEnable()
-    {
-        if (grid == null)
-            grid = GetComponent<TileGrid>();
-
-        if (grid != null)
-        {
-            grid.TileStateChanged += HandleTileStateChanged;
-            SyncExpandedTiles();
-        }
-    }
-
-    private void OnDisable()
-    {
-        if (grid != null)
-            grid.TileStateChanged -= HandleTileStateChanged;
-    }
     public TileBuildOption GetBuildOption(TileGrid.Tile tile, TileBuildAction action)
     {
         TileBuildOption option;
-        option.cost = 0f;
         option.reason = string.Empty;
-        option.canBuild = Evaluate(tile, action, out option.cost, out option.reason);
+
+        float cost = GetNextCost(action);
+        string reason;
+        bool ok = Evaluate(tile, action, out cost, out reason);
+
+        option.canBuild = ok;
+        option.cost = cost;
+        option.reason = reason;
         return option;
     }
 
     public bool TryBuild(TileBuildAction action)
     {
-        var targetTile = grid != null ? grid.SelectedTile : null;
-        return TryBuild(action, targetTile, out _);
+        var tile = selection != null ? selection.Selected : null;
+        return TryBuild(action, tile, out _);
     }
 
     public bool TryBuild(TileBuildAction action, TileGrid.Tile tile, out string failureReason)
@@ -136,34 +123,43 @@ public class TileBuildController : MonoBehaviour
         if (!Evaluate(tile, action, out var cost, out failureReason))
             return false;
 
+        var wallet = economy ?? IdleEconomyManager.Instance;
         if (cost > 0f)
         {
-            var targetEconomy = economy != null ? economy : IdleEconomyManager.Instance;
-            if (targetEconomy == null || !targetEconomy.TrySpend(cost))
+            if (wallet == null || !wallet.TrySpend(cost))
             {
                 failureReason = string.IsNullOrEmpty(failureReason) ? "Za mało pieniędzy." : failureReason;
                 return false;
             }
-
-            economy = targetEconomy;
+            economy = wallet; // cache
         }
 
-        ApplyBuild(tile, action);
+        // 1) Jeśli używasz BuildExecutor do stawiania prefaba i efektów – odkomentuj:
+        // executor?.ApplyBuild(<TileRuntime/TileData>, action);
+
+        // 2) Minimalny wariant zgodny z Twoją logiką – tylko kompozycja + liczniki:
+        ApplyBuildOnComposition(tile, action);
+
+        // sygnał dla innych systemów
+        BuildApplied?.Invoke(tile, action);
+
         return true;
     }
 
+    // Ekspansja siatki: koszt oparty o liczbę zajętych kafli w runtime store
     public float GetNextTileExpansionCost()
     {
-        return GetProgressiveCost(tileExpansionStartingCost, tileExpansionCostMultiplier, builtTileCount);
+        int occupied = runtime != null ? runtime.OccupiedCount : 0;
+        return GetProgressiveCost(tileExpansionStartingCost, tileExpansionCostMultiplier, occupied);
     }
 
     public TileBuildOption GetTileExpansionOption()
     {
-        TileBuildOption option;
-        option.cost = GetNextTileExpansionCost();
-        option.reason = string.Empty;
-        option.canBuild = HasEnoughFunds(option.cost, ref option.reason);
-        return option;
+        var opt = new TileBuildOption();
+        opt.cost = GetNextTileExpansionCost();
+        opt.reason = string.Empty;
+        opt.canBuild = HasEnoughFunds(opt.cost, ref opt.reason);
+        return opt;
     }
 
     public bool TrySpendForTileExpansion(out float cost, out string failureReason)
@@ -177,22 +173,23 @@ public class TileBuildController : MonoBehaviour
         if (cost <= 0f)
             return true;
 
-        var targetEconomy = economy != null ? economy : IdleEconomyManager.Instance;
-        if (targetEconomy == null || !targetEconomy.TrySpend(cost))
+        var wallet = economy ?? IdleEconomyManager.Instance;
+        if (wallet == null || !wallet.TrySpend(cost))
         {
             failureReason = string.IsNullOrEmpty(failureReason) ? "Za mało pieniędzy." : failureReason;
             return false;
         }
 
-        economy = targetEconomy;
+        economy = wallet;
         return true;
     }
 
+    // ---------- Reguły i koszty ----------
 
     public bool Evaluate(TileGrid.Tile tile, TileBuildAction action, out float cost, out string failureReason)
     {
-        cost = GetNextCost(action);
         failureReason = string.Empty;
+        cost = GetNextCost(action);
 
         if (tile == null)
         {
@@ -200,48 +197,65 @@ public class TileBuildController : MonoBehaviour
             return false;
         }
 
-        var composition = tile.composition;
+        // 1) Reguły kompozycji – tak jak miałeś:
+        if (!ValidateComposition(tile, action, ref failureReason))
+            return false;
+
+        // 2) Fundusze:
+        if (!HasEnoughFunds(cost, ref failureReason))
+            return false;
+
+        // 3) (opcjonalnie) dodatkowe reguły zasięgu/sąsiedztwa można podłączyć tutaj
+
+        return true;
+    }
+
+    private bool ValidateComposition(TileGrid.Tile tile, TileBuildAction action, ref string failureReason)
+    {
+        var c = tile.composition;
 
         switch (action)
         {
             case TileBuildAction.Grass:
-                if (composition.levelGrass >= 3)
+                if (c.levelGrass >= 3)
                 {
                     failureReason = "Trawa na maks poziomie.";
                     return false;
                 }
-
-                return HasEnoughFunds(cost, ref failureReason);
+                return true;
 
             case TileBuildAction.Bush:
-                if (composition.levelGrass <= 0)
+                if (c.levelGrass <= 0)
                 {
                     failureReason = "Najpierw posiej trawę.";
                     return false;
                 }
-
-                if (composition.hasBush && composition.bushLevel >= 3)
+                if (c.hasBush && c.bushLevel >= 3)
                 {
                     failureReason = "Krzak na maks poziomie.";
                     return false;
                 }
-
-                return HasEnoughFunds(cost, ref failureReason);
+                return true;
 
             case TileBuildAction.Tree:
-                if (composition.levelGrass < 2)
+                if (c.levelGrass < 2)
                 {
                     failureReason = "Potrzeba gęstej trawy.";
                     return false;
                 }
-
-                if (composition.hasTree && composition.treeLevel >= 3)
+                if (c.hasTree && c.treeLevel >= 3)
                 {
                     failureReason = "Drzewo na maks poziomie.";
                     return false;
                 }
-
-                return HasEnoughFunds(cost, ref failureReason);
+                // UWAGA: nie używamy tile.occupied – to jest teraz w runtime store
+                var r = runtime != null ? runtime.Get(tile) : null;
+                if (r != null && r.occupied)
+                {
+                    failureReason = "Kafelek już zajęty.";
+                    return false;
+                }
+                return true;
 
             default:
                 failureReason = "Nieznana akcja.";
@@ -251,12 +265,9 @@ public class TileBuildController : MonoBehaviour
 
     private bool HasEnoughFunds(float cost, ref string failureReason)
     {
-        if (cost <= 0f)
-            return true;
-
-        var targetEconomy = economy != null ? economy : IdleEconomyManager.Instance;
-        if (targetEconomy != null && targetEconomy.Currency >= cost)
-            return true;
+        if (cost <= 0f) return true;
+        var wallet = economy ?? IdleEconomyManager.Instance;
+        if (wallet != null && wallet.Currency >= cost) return true;
 
         failureReason = string.IsNullOrEmpty(failureReason) ? "Za mało pieniędzy." : failureReason;
         return false;
@@ -272,14 +283,14 @@ public class TileBuildController : MonoBehaviour
                 Debug.LogWarning($"[TileBuildController] Brak konfiguracji kosztu dla akcji {action}.", this);
                 missingCostLogged.Add(action);
             }
-
             return 0f;
         }
-
         return settings.GetCostForNext(built);
     }
 
-    private void ApplyBuild(TileGrid.Tile tile, TileBuildAction action)
+    // ---------- Aktualizacja kompozycji + liczniki ----------
+
+    private void ApplyBuildOnComposition(TileGrid.Tile tile, TileBuildAction action)
     {
         switch (action)
         {
@@ -304,14 +315,19 @@ public class TileBuildController : MonoBehaviour
                 tile.composition.hasTree = true;
                 tile.composition.treeLevel = newTreeLevel;
                 tile.composition.Validate();
-                tile.occupied = true;
                 IncrementBuiltCount(TileBuildAction.Tree);
+
+                // Jeżeli chcesz od razu oznaczyć runtime jako zajęty (bez stawiania prefabu):
+                var r = runtime != null ? runtime.Get(tile) : null;
+                if (r != null && !r.occupied)
+                {
+                    runtime.MarkOccupied(tile, inst: null, template: null);
+                }
                 break;
         }
-        
-        if (grid != null)
-            grid.NotifyTileChanged(tile);
     }
+
+    // ---------- Liczniki i koszty ----------
 
     private void EnsureCountDictionary()
     {
@@ -328,17 +344,16 @@ public class TileBuildController : MonoBehaviour
         EnsureCountDictionary();
         CacheCostLookup();
         builtCounts[TileBuildAction.Grass] = 0;
-        builtCounts[TileBuildAction.Bush] = 0;
-        builtCounts[TileBuildAction.Tree] = 0;
+        builtCounts[TileBuildAction.Bush]  = 0;
+        builtCounts[TileBuildAction.Tree]  = 0;
 
-        if (grid == null)
-            return;
+        if (!grid) return;
 
+        // zliczamy po kompozycjach kafli (tak jak wcześniej)
         for (int i = 0; i < grid.tiles.Count; i++)
         {
             var tile = grid.tiles[i];
-            if (tile == null)
-                continue;
+            if (tile == null) continue;
 
             builtCounts[TileBuildAction.Grass] += Mathf.Clamp(tile.composition.levelGrass, 0, 3);
             if (tile.composition.hasBush)
@@ -346,7 +361,6 @@ public class TileBuildController : MonoBehaviour
             if (tile.composition.hasTree)
                 builtCounts[TileBuildAction.Tree] += Mathf.Clamp(tile.composition.treeLevel, 1, 3);
         }
-        SyncExpandedTiles();
     }
 
     private int GetBuiltCount(TileBuildAction action)
@@ -365,66 +379,22 @@ public class TileBuildController : MonoBehaviour
         costLookup.Clear();
         missingCostLogged.Clear();
 
-        if (costSettings == null)
-            return;
-
+        if (costSettings == null) return;
         for (int i = 0; i < costSettings.Length; i++)
         {
-            var settings = costSettings[i];
-            costLookup[settings.action] = settings;
-        }
-    }
-    
-    private void SyncExpandedTiles()
-    {
-        expandedTiles.Clear();
-        builtTileCount = 0;
-
-        if (grid == null || grid.tiles == null)
-            return;
-
-        for (int i = 0; i < grid.tiles.Count; i++)
-        {
-            var tile = grid.tiles[i];
-            if (tile == null || !tile.occupied)
-                continue;
-
-            expandedTiles.Add(tile);
-        }
-
-        builtTileCount = expandedTiles.Count;
-    }
-
-    private void HandleTileStateChanged(TileGrid.Tile tile)
-    {
-        if (tile == null)
-            return;
-
-        if (tile.occupied)
-        {
-            if (expandedTiles.Add(tile))
-                builtTileCount = expandedTiles.Count;
-        }
-        else
-        {
-            if (expandedTiles.Remove(tile))
-                builtTileCount = expandedTiles.Count;
+            var s = costSettings[i];
+            costLookup[s.action] = s;
         }
     }
 
     private static float GetProgressiveCost(float startingCost, float multiplier, int builtCount)
     {
         float baseCost = Mathf.Max(0f, startingCost);
-        if (builtCount <= 0)
-            return baseCost;
+        if (builtCount <= 0) return baseCost;
 
-        float appliedMultiplier = Mathf.Max(0f, multiplier);
-        if (Mathf.Approximately(appliedMultiplier, 0f))
-            return 0f;
-
-        if (Mathf.Approximately(appliedMultiplier, 1f))
-            return baseCost;
-
-        return baseCost * Mathf.Pow(appliedMultiplier, builtCount);
+        float applied = Mathf.Max(0f, multiplier);
+        if (Mathf.Approximately(applied, 0f)) return 0f;
+        if (Mathf.Approximately(applied, 1f)) return baseCost;
+        return baseCost * Mathf.Pow(applied, builtCount);
     }
 }

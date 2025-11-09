@@ -6,7 +6,8 @@ using UnityEngine.InputSystem;
 public class TileClickSelector : MonoBehaviour
 {
     [SerializeField] private Camera mainCamera;
-    [SerializeField] private TileGrid grid;
+    [SerializeField] private TileQueryService query;
+    [SerializeField] private TileSelectionModel selection;
     [SerializeField] private LayerMask groundMask = ~0;
     [SerializeField] private float maxRayDistance = 500f;
 
@@ -18,21 +19,14 @@ public class TileClickSelector : MonoBehaviour
 
     private void Awake()
     {
-        if (mainCamera == null)
-            mainCamera = Camera.main;
-
-        if (grid == null)
-            grid = GetComponent<TileGrid>();
-    }
-
-    private void OnDisable()
-    {
-        ClearSelectionInternal(true);
+        if (!mainCamera) mainCamera = Camera.main;
+        if (!query) query = FindAnyObjectByType<TileQueryService>();
+        if (!selection) selection = FindAnyObjectByType<TileSelectionModel>();
     }
 
     private void Update()
     {
-        if (grid == null || mainCamera == null)
+        if (mainCamera == null || selection == null)
             return;
 
         if (!TryGetPointerDown(out var screenPosition, out var pointerId))
@@ -41,7 +35,7 @@ public class TileClickSelector : MonoBehaviour
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId))
             return;
 
-        if (RaycastToWorld(screenPosition, out var worldPoint) && grid.TryGetNearestTile(worldPoint, out var tile, maxRayDistance))
+        if (RaycastToWorld(screenPosition, out var worldPoint) && query.TryGetNearestTile(worldPoint, out var tile, maxRayDistance))
         {
             SetSelection(tile);
             Debug.Log("jest i mycha");
@@ -63,8 +57,8 @@ public class TileClickSelector : MonoBehaviour
             return;
 
         _selectedTile = tile;
-        if (grid != null)
-            grid.SetSelectedTile(tile);
+        if (selection != null)
+            selection.SetSelectedTile(tile);
 
         TileSelected?.Invoke(tile);
     }
@@ -76,8 +70,8 @@ public class TileClickSelector : MonoBehaviour
 
         _selectedTile = null;
 
-        if (notifyGrid && grid != null)
-            grid.ClearSelectedTile();
+        if (notifyGrid && selection != null)
+            selection.ClearSelectedTile();
 
         TileSelected?.Invoke(null);
     }

@@ -5,9 +5,16 @@ using UnityEngine.InputSystem;
 
 public class TileAvailabilityVisualizer : MonoBehaviour
 {
-    [SerializeField] private TileGrid tileGrid;
+    [Header("Context")]
+    [SerializeField] private TileGrid grid;
+    [SerializeField] private TileAvailabilityService availability;
+    [SerializeField] private TilePlacementService placement;
+    [SerializeField] private TileSelectionModel selection;
+    [SerializeField] private TileQueryService query;
+    [SerializeField] private TileRuntimeStore runtime;
+
+    [Header("Available Tiles (ghost)")]
     [SerializeField] private Transform availableTileParent;
-    [SerializeField] private GameObject fallbackAvailableTilePrefab;
     [SerializeField, Range(0f, 1f)] private float availableAlpha = 0.35f;
     [SerializeField] private string availableTag = "";
 
@@ -18,12 +25,11 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     [SerializeField] private string selectedTag = "";
     [SerializeField] private Vector3 selectedOffset = new Vector3(0f, 1f, 0f);
 
-    [Header("Tile Purchase")]
+    [Header("Tile Purchase (hold to buy)")]
     [SerializeField, Min(0f)] private float purchaseHoldDuration = 2f;
     [SerializeField, Min(0f)] private float purchaseCost = 0f;
     [SerializeField] private IdleEconomyManager economy;
     [SerializeField] private Transform purchasedTileParent;
-    [SerializeField] private GameObject fallbackPurchasedTilePrefab;
     [SerializeField] private Camera purchaseCamera;
     [SerializeField] private LayerMask purchaseRaycastMask = ~0;
     [SerializeField] private float purchaseRaycastDistance = 500f;
@@ -33,8 +39,10 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private readonly Dictionary<TileGrid.Tile, GameObject> _availableTiles = new Dictionary<TileGrid.Tile, GameObject>();
     private readonly List<TileGrid.Tile> _removalBuffer = new List<TileGrid.Tile>();
+
     private TileGrid.Tile _highlightedTile;
     private GameObject _selectedTileInstance;
+
     private const int MousePointerId = -1;
     private bool _isHoldingToPurchase;
     private float _holdTimer;
@@ -45,48 +53,40 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private void Awake()
     {
-        if (tileGrid == null)
-            tileGrid = GetComponent<TileGrid>();
+        if (!purchaseCamera) purchaseCamera = Camera.main;
+        if (!economy) economy = IdleEconomyManager.Instance;
 
-        if (availableTileParent == null && tileGrid != null)
-            availableTileParent = tileGrid.transform;
+        if (!availableTileParent && grid) availableTileParent = grid.transform;
+        if (!selectedTileParent && grid) selectedTileParent = grid.transform;
+        if (!purchasedTileParent && grid) purchasedTileParent = grid.transform;
 
-
-        if (selectedTileParent == null && tileGrid != null)
-            selectedTileParent = tileGrid.transform;
-
-        if (purchaseCamera == null)
-            purchaseCamera = Camera.main;
-
-        if (economy == null)
-            economy = IdleEconomyManager.Instance;
+        if (!availability)     availability  = FindAnyObjectByType<TileAvailabilityService>();
+        if (!placement)        placement     = FindAnyObjectByType<TilePlacementService>();
+        if (!selection)        selection     = FindAnyObjectByType<TileSelectionModel>();
+        if (!query)            query         = FindAnyObjectByType<TileQueryService>();
+        if (!runtime)          runtime       = FindAnyObjectByType<TileRuntimeStore>();
+        if (!grid)             grid          = FindAnyObjectByType<TileGrid>();
     }
 
     private void OnEnable()
     {
-        if (tileGrid != null)
-        {
-            tileGrid.TileStateChanged += HandleTileStateChanged;
-            tileGrid.SelectedTileChanged += HandleSelectedTileChanged;
-        }
+        if (selection != null)
+            selection.SelectionChanged += OnSelectionChanged;
 
         RefreshAvailability();
-        UpdateSelectedTileHighlight(tileGrid != null ? tileGrid.SelectedTile : null);
+        UpdateSelectedTileHighlight(selection != null ? selection.Selected : null);
     }
 
     private void Start()
     {
         RefreshAvailability();
-        UpdateSelectedTileHighlight(tileGrid != null ? tileGrid.SelectedTile : null);
+        UpdateSelectedTileHighlight(selection != null ? selection.Selected : null);
     }
 
     private void OnDisable()
     {
-        if (tileGrid != null)
-        {
-            tileGrid.TileStateChanged -= HandleTileStateChanged;
-            tileGrid.SelectedTileChanged -= HandleSelectedTileChanged;
-        }
+        if (selection != null)
+            selection.SelectionChanged -= OnSelectionChanged;
 
         ClearAvailableTiles();
         ClearSelectedTileHighlight();
@@ -98,35 +98,30 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         UpdatePurchaseHold();
     }
 
-    private void HandleTileStateChanged(TileGrid.Tile _)
-    {
-        RefreshAvailability();
-    }
-    private void HandleSelectedTileChanged(TileGrid.Tile tile)
+    private void OnSelectionChanged(TileGrid.Tile tile)
     {
         UpdateSelectedTileHighlight(tile);
     }
+
     private void RefreshAvailability()
     {
-        if (tileGrid == null)
+        if (availability == null)
         {
             ClearAvailableTiles();
             return;
         }
 
         var currentlyAvailable = new HashSet<TileGrid.Tile>();
-
-        foreach (var tile in tileGrid.GetAvailableTiles())
+        foreach (var tile in availability.GetAvailable())
         {
-            if (tile == null || tile.occupied)
-                continue;
+            if (tile == null) continue;
+            var rt = runtime?.Get(tile);
+            if (rt != null && rt.occupied) continue;
 
             currentlyAvailable.Add(tile);
+            if (_availableTiles.ContainsKey(tile)) continue;
 
-            if (_availableTiles.ContainsKey(tile))
-                continue;
-
-            var instance = tileGrid.PlaceAvailabilityPrefab(tile, fallbackAvailableTilePrefab, availableTileParent, availableAlpha, availableTag);
+            var instance = placement?.PlaceAvailability(tile, availableAlpha, availableTag);
             if (instance != null)
                 _availableTiles.Add(tile, instance);
         }
@@ -137,13 +132,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     private void ClearAvailableTiles()
     {
         foreach (var kvp in _availableTiles)
-        {
-            if (kvp.Key != null)
-                kvp.Key.available = false;
-
-            if (tileGrid != null)
-                tileGrid.RemoveAvailabilityPrefab(kvp.Key);
-        }
+            placement?.RemoveAvailability(kvp.Key);
 
         _availableTiles.Clear();
     }
@@ -153,66 +142,44 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         _removalBuffer.Clear();
 
         foreach (var kvp in _availableTiles)
-        {
-            var tile = kvp.Key;
-            if (!currentlyAvailable.Contains(tile))
-                _removalBuffer.Add(tile);
-        }
+            if (!currentlyAvailable.Contains(kvp.Key))
+                _removalBuffer.Add(kvp.Key);
 
         foreach (var tile in _removalBuffer)
-        {
             RemoveAvailableTile(tile);
-        }
 
         _removalBuffer.Clear();
     }
 
     private void RemoveAvailableTile(TileGrid.Tile tile)
     {
-        if (_availableTiles.ContainsKey(tile))
-        {
-            tile.available = false;
+        if (!_availableTiles.ContainsKey(tile)) return;
 
-            if (tileGrid != null)
-                tileGrid.RemoveAvailabilityPrefab(tile);
-
-
-            _availableTiles.Remove(tile);
-        }
+        placement?.RemoveAvailability(tile);
+        _availableTiles.Remove(tile);
     }
+
     private void UpdateSelectedTileHighlight(TileGrid.Tile tile)
     {
-        if (tile == _highlightedTile)
-            return;
+        if (tile == _highlightedTile) return;
+
         ResetPurchaseHold();
 
-        ClearSelectedTileHighlight();
+        if (_highlightedTile != null)
+            placement?.RemoveAvailability(_highlightedTile);
 
-        if (tile == null)
-            return;
+        _selectedTileInstance = null;
 
-        var parent = selectedTileParent != null ? selectedTileParent : (tileGrid != null ? tileGrid.transform : null);
-        if (parent == null)
-            return;
+        if (tile == null) { _highlightedTile = null; return; }
 
-        var template = fallbackSelectedTilePrefab != null ? fallbackSelectedTilePrefab : fallbackAvailableTilePrefab;
-        if (template == null)
-            return;
+        _selectedTileInstance = placement?.PlaceAvailabilitySelected(tile, selectedAlpha, selectedTag);
 
-        _selectedTileInstance = Instantiate(template, tile.worldPos + selectedOffset, Quaternion.identity, parent);
-        ConfigureSelectionInstance(_selectedTileInstance, selectedAlpha, selectedTag);
         _highlightedTile = tile;
     }
-
     private void ClearSelectedTileHighlight()
     {
-        if (_selectedTileInstance == null)
-            return;
-
-        if (Application.isPlaying)
-            Destroy(_selectedTileInstance);
-        else
-            DestroyImmediate(_selectedTileInstance);
+        if (_highlightedTile != null)
+            placement?.RemoveAvailability(_highlightedTile);
 
         _selectedTileInstance = null;
         _highlightedTile = null;
@@ -220,49 +187,34 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private static void ConfigureSelectionInstance(GameObject instance, float alpha, string tag)
     {
-        if (instance == null)
-            return;
+        if (!instance) return;
 
-        instance.name = instance.name.Replace("(Clone)", string.Empty).Trim() + " (Selected)";
+        instance.name = instance.name.Replace("(Clone)", "").Trim() + " (Selected)";
+        if (!string.IsNullOrEmpty(tag)) instance.tag = tag;
 
-        if (!string.IsNullOrEmpty(tag))
-            instance.tag = tag;
-
-        foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
+        foreach (var r in instance.GetComponentsInChildren<Renderer>(true))
         {
-            var materials = renderer.materials;
-            for (int i = 0; i < materials.Length; i++)
+            var mats = r.materials;
+            for (int i = 0; i < mats.Length; i++)
             {
-                var material = materials[i];
-                if (!material.HasProperty("_Color"))
-                    continue;
-
-                var color = material.color;
-                color.a = alpha;
-                material.color = color;
+                var m = mats[i];
+                if (!m.HasProperty("_Color")) continue;
+                var c = m.color; c.a = alpha; m.color = c;
             }
         }
-
-        foreach (var collider in instance.GetComponentsInChildren<Collider>(true))
-        {
-            collider.enabled = false;
-        }
+        foreach (var c in instance.GetComponentsInChildren<Collider>(true))
+            c.enabled = false;
     }
+    
     private void UpdatePurchaseHold()
     {
-        if (!isActiveAndEnabled)
+        if (!isActiveAndEnabled || !Application.isPlaying)
         {
             ResetPurchaseHold();
             return;
         }
 
-        if (!Application.isPlaying)
-        {
-            ResetPurchaseHold();
-            return;
-        }
-
-        if (_highlightedTile == null || tileGrid == null || purchaseHoldDuration <= 0f)
+        if (_highlightedTile == null || purchaseHoldDuration <= 0f)
         {
             ResetPurchaseHold();
             return;
@@ -293,7 +245,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
             return;
 
         _holdTimer += Time.deltaTime;
-
         float progress = Mathf.Clamp01(_holdTimer / purchaseHoldDuration);
         UpdateHoldIndicator(progress);
 
@@ -304,17 +255,14 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         }
 
         if (TryPurchaseHighlightedTile())
-        {
             UpdateHoldIndicator(1f);
-        }
 
         ResetPurchaseHold();
     }
 
     private void BeginPurchaseHold(int pointerId)
     {
-        if (_highlightedTile == null)
-            return;
+        if (_highlightedTile == null) return;
 
         _isHoldingToPurchase = true;
         _holdTimer = 0f;
@@ -323,7 +271,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         UpdateHoldIndicator(0f);
         UpdateHoldIndicatorPosition();
     }
-
     private void ResetPurchaseHold()
     {
         _isHoldingToPurchase = false;
@@ -335,49 +282,43 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     private bool TryPurchaseHighlightedTile()
     {
         var tile = _highlightedTile;
-        if (tileGrid == null || tile == null || tile.occupied)
+        if (tile == null || placement == null || runtime == null)
             return false;
 
-        if (!_availableTiles.ContainsKey(tile))
-            return false;
+        var rt = runtime.Get(tile);
+        if (rt.occupied) return false;
+        if (!_availableTiles.ContainsKey(tile)) return false;
 
-        var prefab = tile.placedPrefab != null ? tile.placedPrefab : fallbackPurchasedTilePrefab;
-        if (prefab == null)
-        {
-            Debug.LogWarning("[TileAvailabilityVisualizer] Brak prefabu kafelka do postawienia.", this);
-            return false;
-        }
-
-        IdleEconomyManager targetEconomy = economy != null ? economy : IdleEconomyManager.Instance;
-
+        var wallet = economy ?? IdleEconomyManager.Instance;
         if (purchaseCost > 0f)
         {
-            if (targetEconomy == null || !targetEconomy.TrySpend(purchaseCost))
+            if (wallet == null || !wallet.TrySpend(purchaseCost))
                 return false;
-
-            economy = targetEconomy;
+            economy = wallet;
         }
 
-        Transform parent = purchasedTileParent != null ? purchasedTileParent : (tileGrid != null ? tileGrid.transform : null);
-        if (parent == null)
+        var parent = purchasedTileParent ? purchasedTileParent : grid ? grid.transform : null;
+        if (!parent)
         {
-            if (purchaseCost > 0f && targetEconomy != null)
-                targetEconomy.AddIncome(purchaseCost);
+            if (purchaseCost > 0f && wallet != null) wallet.AddIncome(purchaseCost);
             Debug.LogWarning("[TileAvailabilityVisualizer] Brak rodzica dla kupionego kafelka.", this);
             return false;
         }
 
-        var instance = tileGrid.PlaceTile(prefab, tile, parent, null);
-        if (instance == null)
+        var inst = placement.PlaceOccupant(tile, Quaternion.identity);
+        if (inst == null)
         {
-            if (purchaseCost > 0f && targetEconomy != null)
-                targetEconomy.AddIncome(purchaseCost);
+            if (purchaseCost > 0f && wallet != null) wallet.AddIncome(purchaseCost);
             Debug.LogWarning("[TileAvailabilityVisualizer] Nie udało się postawić kafelka.", this);
             return false;
         }
 
+        if (purchasedTileOffset != Vector3.zero)
+            inst.transform.position += purchasedTileOffset;
+
         RemoveAvailableTile(tile);
         UpdateSelectedTileHighlight(tile);
+        RefreshAvailability();
         return true;
     }
 
@@ -386,19 +327,15 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         position = default;
         pointerId = int.MinValue;
 
-        var touchscreen = Touchscreen.current;
-        if (touchscreen != null)
+        var ts = Touchscreen.current;
+        if (ts != null)
         {
-            foreach (var touch in touchscreen.touches)
+            foreach (var touch in ts.touches)
             {
-                if (touch == null || !touch.press.isPressed)
-                    continue;
-
+                if (touch == null || !touch.press.isPressed) continue;
                 position = touch.position.ReadValue();
                 pointerId = touch.touchId.ReadValue();
-
-                if (!_isHoldingToPurchase || pointerId == _activePointerId)
-                    return true;
+                if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
             }
         }
 
@@ -407,9 +344,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         {
             position = mouse.position.ReadValue();
             pointerId = MousePointerId;
-
-            if (!_isHoldingToPurchase || pointerId == _activePointerId)
-                return true;
+            if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
         }
 
         var pen = Pen.current;
@@ -417,9 +352,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         {
             position = pen.position.ReadValue();
             pointerId = MousePointerId;
-
-            if (!_isHoldingToPurchase || pointerId == _activePointerId)
-                return true;
+            if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
         }
 
         return false;
@@ -427,17 +360,14 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private bool IsPointerOverHighlightedTile(Vector2 screenPosition)
     {
-        if (purchaseCamera == null)
-            purchaseCamera = Camera.main;
-
-        if (purchaseCamera == null)
-            return false;
+        if (!purchaseCamera) purchaseCamera = Camera.main;
+        if (!purchaseCamera || query == null) return false;
 
         var ray = purchaseCamera.ScreenPointToRay(screenPosition);
-        if (!Physics.Raycast(ray, out var hitInfo, purchaseRaycastDistance, purchaseRaycastMask, QueryTriggerInteraction.Ignore))
+        if (!Physics.Raycast(ray, out var hit, purchaseRaycastDistance, purchaseRaycastMask, QueryTriggerInteraction.Ignore))
             return false;
 
-        if (!tileGrid.TryGetNearestTile(hitInfo.point, out var tile, purchaseRaycastDistance))
+        if (!query.TryGetNearestTile(hit.point, out var tile, purchaseRaycastDistance))
             return false;
 
         return tile == _highlightedTile;
@@ -446,34 +376,25 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     private void CreateHoldIndicator()
     {
         DestroyHoldIndicator();
+        if (!holdProgressPrefab) return;
 
-        if (holdProgressPrefab == null)
-            return;
+        var parent = selectedTileParent ? selectedTileParent : grid ? grid.transform : null;
+        if (!parent) return;
 
-        Transform parent = selectedTileParent != null ? selectedTileParent : (tileGrid != null ? tileGrid.transform : null);
-        if (parent == null)
-            return;
-
-        Vector3 position = _highlightedTile != null ? _highlightedTile.worldPos + holdProgressOffset : Vector3.zero;
-        _holdProgressInstance = Instantiate(holdProgressPrefab, position, Quaternion.identity, parent);
+        var pos = _highlightedTile != null ? _highlightedTile.worldPos + holdProgressOffset : Vector3.zero;
+        _holdProgressInstance = Instantiate(holdProgressPrefab, pos, Quaternion.identity, parent);
         _holdProgressIndicator = _holdProgressInstance.GetComponentInChildren<HoldProgressIndicator>();
         if (_holdProgressIndicator == null)
             _holdProgressIndicator = _holdProgressInstance.GetComponent<HoldProgressIndicator>();
 
-        if (_holdProgressInstance != null)
-            _holdProgressBaseScale = _holdProgressInstance.transform.localScale;
+        if (_holdProgressInstance) _holdProgressBaseScale = _holdProgressInstance.transform.localScale;
     }
+
 
     private void DestroyHoldIndicator()
     {
-        if (_holdProgressInstance == null)
-            return;
-
-        if (Application.isPlaying)
-            Destroy(_holdProgressInstance);
-        else
-            DestroyImmediate(_holdProgressInstance);
-
+        if (!_holdProgressInstance) return;
+        if (Application.isPlaying) Destroy(_holdProgressInstance); else DestroyImmediate(_holdProgressInstance);
         _holdProgressInstance = null;
         _holdProgressIndicator = null;
     }
@@ -497,9 +418,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private void UpdateHoldIndicatorPosition()
     {
-        if (_holdProgressInstance == null || _highlightedTile == null)
-            return;
-
+        if (!_holdProgressInstance || _highlightedTile == null) return;
         _holdProgressInstance.transform.position = _highlightedTile.worldPos + holdProgressOffset;
     }
 }

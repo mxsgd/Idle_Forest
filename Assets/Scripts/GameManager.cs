@@ -4,11 +4,18 @@ public class GameManager : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private TileGrid tileGrid;
-    [SerializeField] private GameObject startingTilePrefab;
-    [SerializeField] private Transform startingTileParent;
+    [SerializeField] private TilePlacementService placement;
+    [SerializeField] private TileRuntimeStore runtime;
 
     [Header("Starting Tile")]
     [SerializeField] private bool placeStartingTileOnStart = true;
+
+    private void Awake()
+    {
+        if (!tileGrid)   tileGrid   = FindAnyObjectByType<TileGrid>();
+        if (!placement)  placement  = FindAnyObjectByType<TilePlacementService>();
+        if (!runtime)    runtime    = FindAnyObjectByType<TileRuntimeStore>();
+    }
 
     private void Start()
     {
@@ -18,16 +25,21 @@ public class GameManager : MonoBehaviour
 
     public void PlaceStartingTile()
     {
-        if (tileGrid == null)
+        if (!tileGrid || !placement || !runtime)
             return;
 
-        TileGrid.Tile centerTile = tileGrid.GetCenterTile();
-        if (centerTile == null || centerTile.occupied)
+        var centerTile = tileGrid.GetCenterTile();
+        if (centerTile == null)
             return;
 
-        Transform parent = startingTileParent != null ? startingTileParent : tileGrid.transform;
-        Quaternion rotation = tileGrid.transform.rotation;
+        var rt = runtime.Get(centerTile);
+        if (rt != null && rt.occupied)
+            return;
 
-        tileGrid.PlaceTile(startingTilePrefab, centerTile, parent, rotation);
+        var rotation = tileGrid.transform.rotation;
+
+        var instance = placement.PlaceOccupant(centerTile, rotation);
+        if (instance == null)
+            return;
     }
 }

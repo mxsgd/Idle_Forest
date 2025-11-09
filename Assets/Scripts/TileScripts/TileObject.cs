@@ -17,11 +17,4 @@ public class TileObject : MonoBehaviour
         tile = assignedTile;
     }
 
-    private void OnDestroy()
-    {
-        if (grid != null && tile != null && tile.occupant == gameObject)
-        {
-            grid.FreeTile(tile);
-        }
-    }
 }
