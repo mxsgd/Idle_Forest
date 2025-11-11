@@ -18,9 +18,8 @@ public class TileGrid : MonoBehaviour
         public int q, r;
         public Vector3 worldPos;
         public TileComposition composition = new TileComposition();
-        public TileDensity Density => composition.GetDensity();
         public TileElement DominantElement => composition.GetDominantElement();
-        public float Production => composition.GetProduction();
+        public float Production => composition.GetSumIncome();
     }
 
     public List<Tile> tiles = new List<Tile>();

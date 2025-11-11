@@ -116,6 +116,7 @@ public class TileContextPanel : MonoBehaviour
         if (label != null)
         {
             string priceText = option.cost > 0f ? option.cost.ToString("N0") : "0";
+            Debug.Log(priceText);
             if (!option.canBuild && !string.IsNullOrEmpty(option.reason))
                 priceText += $"\n{option.reason}";
 

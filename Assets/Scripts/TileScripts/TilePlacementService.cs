@@ -13,8 +13,6 @@ public class TilePlacementService : MonoBehaviour
     [SerializeField] private Vector3 occupantOffset = new(0, 1f, 0);
     [SerializeField] private Vector3 availabilityOffset = new(0, 1f, 0);
 
-    public event Action<Tile> TileStateChanged;
-
     public GameObject PlaceOccupant(Tile tile, Quaternion rotation)
     {
         if (tile == null || occupantPrefab == null) return null;

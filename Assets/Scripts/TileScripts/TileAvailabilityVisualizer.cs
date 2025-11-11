@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -13,27 +14,26 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     [SerializeField] private TileQueryService query;
     [SerializeField] private TileRuntimeStore runtime;
 
+
     [Header("Available Tiles (ghost)")]
     [SerializeField] private Transform availableTileParent;
     [SerializeField, Range(0f, 1f)] private float availableAlpha = 0.35f;
     [SerializeField] private string availableTag = "";
 
+
     [Header("Selection Highlight")]
     [SerializeField] private Transform selectedTileParent;
-    [SerializeField] private GameObject fallbackSelectedTilePrefab;
     [SerializeField, Range(0f, 1f)] private float selectedAlpha = 0.5f;
     [SerializeField] private string selectedTag = "";
-    [SerializeField] private Vector3 selectedOffset = new Vector3(0f, 1f, 0f);
+
 
     [Header("Tile Purchase (hold to buy)")]
     [SerializeField, Min(0f)] private float purchaseHoldDuration = 2f;
-    [SerializeField, Min(0f)] private float purchaseCost = 0f;
     [SerializeField] private IdleEconomyManager economy;
     [SerializeField] private Transform purchasedTileParent;
     [SerializeField] private Camera purchaseCamera;
     [SerializeField] private LayerMask purchaseRaycastMask = ~0;
     [SerializeField] private float purchaseRaycastDistance = 500f;
-    [SerializeField] private Vector3 purchasedTileOffset = Vector3.zero;
     [SerializeField] private Vector3 holdProgressOffset = new Vector3(0f, 1.1f, 0f);
     [SerializeField] private GameObject holdProgressPrefab;
 
@@ -166,8 +166,20 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         ResetPurchaseHold();
 
         if (_highlightedTile != null)
+        {
             placement?.RemoveAvailability(_highlightedTile);
 
+            if (_availableTiles.ContainsKey(_highlightedTile))
+            {
+                var ghost = placement.PlaceAvailability(_highlightedTile, availableAlpha, availableTag);
+                _availableTiles[_highlightedTile] = ghost;
+            }
+            else
+            {
+                _availableTiles.Remove(_highlightedTile);
+            }
+
+        }
         _selectedTileInstance = null;
 
         if (tile == null) { _highlightedTile = null; return; }
@@ -180,32 +192,10 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     {
         if (_highlightedTile != null)
             placement?.RemoveAvailability(_highlightedTile);
-
         _selectedTileInstance = null;
         _highlightedTile = null;
     }
 
-    private static void ConfigureSelectionInstance(GameObject instance, float alpha, string tag)
-    {
-        if (!instance) return;
-
-        instance.name = instance.name.Replace("(Clone)", "").Trim() + " (Selected)";
-        if (!string.IsNullOrEmpty(tag)) instance.tag = tag;
-
-        foreach (var r in instance.GetComponentsInChildren<Renderer>(true))
-        {
-            var mats = r.materials;
-            for (int i = 0; i < mats.Length; i++)
-            {
-                var m = mats[i];
-                if (!m.HasProperty("_Color")) continue;
-                var c = m.color; c.a = alpha; m.color = c;
-            }
-        }
-        foreach (var c in instance.GetComponentsInChildren<Collider>(true))
-            c.enabled = false;
-    }
-    
     private void UpdatePurchaseHold()
     {
         if (!isActiveAndEnabled || !Application.isPlaying)
@@ -290,31 +280,9 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         if (!_availableTiles.ContainsKey(tile)) return false;
 
         var wallet = economy ?? IdleEconomyManager.Instance;
-        if (purchaseCost > 0f)
-        {
-            if (wallet == null || !wallet.TrySpend(purchaseCost))
-                return false;
-            economy = wallet;
-        }
 
-        var parent = purchasedTileParent ? purchasedTileParent : grid ? grid.transform : null;
-        if (!parent)
-        {
-            if (purchaseCost > 0f && wallet != null) wallet.AddIncome(purchaseCost);
-            Debug.LogWarning("[TileAvailabilityVisualizer] Brak rodzica dla kupionego kafelka.", this);
-            return false;
-        }
-
-        var inst = placement.PlaceOccupant(tile, Quaternion.identity);
-        if (inst == null)
-        {
-            if (purchaseCost > 0f && wallet != null) wallet.AddIncome(purchaseCost);
-            Debug.LogWarning("[TileAvailabilityVisualizer] Nie udało się postawić kafelka.", this);
-            return false;
-        }
-
-        if (purchasedTileOffset != Vector3.zero)
-            inst.transform.position += purchasedTileOffset;
+        if(wallet.TryBuyNextTile())
+            placement.PlaceOccupant(tile, Quaternion.identity);
 
         RemoveAvailableTile(tile);
         UpdateSelectedTileHighlight(tile);

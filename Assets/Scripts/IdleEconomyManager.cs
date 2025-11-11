@@ -17,16 +17,53 @@ public class IdleEconomyManager : MonoBehaviour
     [SerializeField] private string currencyFormat = "{0:N0}";
     [SerializeField] private TMP_Text currencyText;
 
-    [Header("Income")] 
-    [SerializeField] private float incomeTickInterval = 0.5f;
+    [Header("Income")]
+    [SerializeField, Min(0.01f)] private float incomeTickInterval = 0.5f;
+    [Tooltip("Jeśli false – dochód nie będzie naliczany.")]
+    [SerializeField] private bool incomeEnabled = true;
 
+    [Header("Expansion Cost")]
+    [SerializeField, Min(0f)] private float tileCost = 1f;
+    [SerializeField, Min(1f)] private float tileCostMultiplier = 2f;
+
+    // === Runtime ===
     private readonly List<IIncomeSource> incomeSources = new();
     private float currency;
     private float incomeTimer;
 
-    public event Action<float> CurrencyChanged;
+    // === Events ===
+    public event Action<float> CurrencyChanged;               // new currency
+    public event Action<float, int> IncomeTicked;             // incomePerTick, ticks
+    public event Action<float> TileCostChanged;               // new tile cost
 
     public float Currency => currency;
+    public float IncomeTickInterval
+    {
+        get => incomeTickInterval;
+        set => incomeTickInterval = Mathf.Max(0.01f, value);
+    }
+    public bool IncomeEnabled
+    {
+        get => incomeEnabled;
+        set => incomeEnabled = value;
+    }
+    public float TileCost => tileCost;
+    public float TileCostMultiplier => tileCostMultiplier;
+
+    /// <summary>Suma IncomePerTick ze wszystkich zarejestrowanych źródeł (np. jeden GridIncomeAggregator).</summary>
+    public float TotalIncomePerTick
+    {
+        get
+        {
+            float sum = 0f;
+            for (int i = 0; i < incomeSources.Count; i++)
+            {
+                var s = incomeSources[i];
+                if (s != null) sum += Mathf.Max(0f, s.IncomePerTick);
+            }
+            return sum;
+        }
+    }
 
     private void Awake()
     {
@@ -35,21 +72,20 @@ public class IdleEconomyManager : MonoBehaviour
             Destroy(gameObject);
             return;
         }
-
         Instance = this;
+
         currency = Mathf.Max(0f, startingCurrency);
         UpdateCurrencyUI();
     }
 
     private void OnDestroy()
     {
-        if (Instance == this)
-            Instance = null;
+        if (Instance == this) Instance = null;
     }
 
     private void Update()
     {
-        if (incomeSources.Count == 0 || incomeTickInterval <= 0f)
+        if (!incomeEnabled || incomeSources.Count == 0 || incomeTickInterval <= 0f)
             return;
 
         incomeTimer += Time.deltaTime;
@@ -59,51 +95,49 @@ public class IdleEconomyManager : MonoBehaviour
         int ticks = Mathf.FloorToInt(incomeTimer / incomeTickInterval);
         incomeTimer -= ticks * incomeTickInterval;
 
-        float incomePerTick = 0f;
-        for (int i = 0; i < incomeSources.Count; i++)
-        {
-            if (incomeSources[i] != null)
-                incomePerTick += Mathf.Max(0f, incomeSources[i].IncomePerTick);
-        }
+        float perTick = TotalIncomePerTick;
+        if (perTick <= 0f) return;
 
-        if (incomePerTick > 0f)
-            AddCurrency(incomePerTick * ticks);
+        float gain = perTick * ticks;
+        AddCurrencyInternal(gain);
+
+        IncomeTicked?.Invoke(perTick, ticks);
     }
 
-    public void RegisterIncomeSource(IIncomeSource source)
+    // === Registration ===
+    public bool RegisterIncomeSource(IIncomeSource source)
     {
-        if (source == null || incomeSources.Contains(source))
-            return;
-
+        if (source == null) return false;
+        if (incomeSources.Contains(source)) return false;
         incomeSources.Add(source);
+        return true;
     }
 
-    public void UnregisterIncomeSource(IIncomeSource source)
+    public bool UnregisterIncomeSource(IIncomeSource source)
     {
-        if (source == null)
-            return;
-
-        incomeSources.Remove(source);
+        if (source == null) return false;
+        return incomeSources.Remove(source);
     }
 
-    public void AddIncome(float amount)
+    // === Currency ops ===
+    public void SetCurrency(float value)
     {
-        if (amount <= 0f)
-            return;
+        currency = Mathf.Max(0f, value);
+        UpdateCurrencyUI();
+        CurrencyChanged?.Invoke(currency);
+    }
 
-        AddCurrency(amount);
+    public void AddIncomeInstant(float amount)
+    {
+        // jednorazowy bonus (np. skrzynka)
+        if (amount <= 0f) return;
+        AddCurrencyInternal(amount);
     }
 
     public bool TrySpend(float cost)
     {
-        if (cost <= 0f)
-            return true;
-
-        if (currency < cost)
-        {
-            Debug.Log("Za malo pieniedzy!");
-            return false;
-        }
+        if (cost <= 0f) return true;
+        if (currency < cost) return false;
 
         currency -= cost;
         UpdateCurrencyUI();
@@ -111,11 +145,23 @@ public class IdleEconomyManager : MonoBehaviour
         return true;
     }
 
-    private void AddCurrency(float amount)
+    public bool TryBuyNextTile()
     {
-        if (amount <= 0f)
-            return;
+        if (currency < tileCost) return false;
 
+        currency -= tileCost;
+        tileCost *= tileCostMultiplier;
+
+        UpdateCurrencyUI();
+        CurrencyChanged?.Invoke(currency);
+        TileCostChanged?.Invoke(tileCost);
+        return true;
+    }
+
+    // === Helpers ===
+    private void AddCurrencyInternal(float amount)
+    {
+        if (amount <= 0f) return;
         currency += amount;
         UpdateCurrencyUI();
         CurrencyChanged?.Invoke(currency);
