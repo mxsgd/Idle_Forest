@@ -11,6 +11,7 @@ public interface IIncomeSource
 public class IdleEconomyManager : MonoBehaviour
 {
     public static IdleEconomyManager Instance { get; private set; }
+    public static event Action<IdleEconomyManager> InstanceChanged;
 
     [Header("Currency")]
     [SerializeField] private float startingCurrency = 0f;
@@ -32,9 +33,9 @@ public class IdleEconomyManager : MonoBehaviour
     private float incomeTimer;
 
     // === Events ===
-    public event Action<float> CurrencyChanged;               // new currency
-    public event Action<float, int> IncomeTicked;             // incomePerTick, ticks
-    public event Action<float> TileCostChanged;               // new tile cost
+    public event Action<float> CurrencyChanged;
+    public event Action<float, int> IncomeTicked;
+    public event Action<float> TileCostChanged;
 
     public float Currency => currency;
     public float IncomeTickInterval
@@ -50,7 +51,6 @@ public class IdleEconomyManager : MonoBehaviour
     public float TileCost => tileCost;
     public float TileCostMultiplier => tileCostMultiplier;
 
-    /// <summary>Suma IncomePerTick ze wszystkich zarejestrowanych źródeł (np. jeden GridIncomeAggregator).</summary>
     public float TotalIncomePerTick
     {
         get
@@ -76,11 +76,17 @@ public class IdleEconomyManager : MonoBehaviour
 
         currency = Mathf.Max(0f, startingCurrency);
         UpdateCurrencyUI();
+
+        InstanceChanged?.Invoke(this);
     }
 
     private void OnDestroy()
     {
-        if (Instance == this) Instance = null;
+        if (Instance == this)
+        {
+            Instance = null;
+            InstanceChanged?.Invoke(null);
+        }
     }
 
     private void Update()
@@ -129,7 +135,6 @@ public class IdleEconomyManager : MonoBehaviour
 
     public void AddIncomeInstant(float amount)
     {
-        // jednorazowy bonus (np. skrzynka)
         if (amount <= 0f) return;
         AddCurrencyInternal(amount);
     }

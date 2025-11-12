@@ -3,18 +3,18 @@ using System.Collections.Generic;
 using Tile = TileGrid.Tile;
 
 [DefaultExecutionOrder(50)]
-public class GrassInstancedTileLayer : MonoBehaviour
+public class BushInstancedTileLayer : MonoBehaviour
 {
     [Header("Źródło assetów")]
-    public GameObject grassPrefab;
-    public Mesh grassMesh;
-    public Material grassMaterial;
+    public GameObject bushPrefab;
+    public Mesh bushMesh;
+    public Material bushMaterial;
 
     [Header("Parametry kafla / siatki")]
     public float tileRadius = 0.5f;
-    public int seed = 1337;
+    public int seed = 424242;
 
-    [Header("Scatter")]
+    [Header("Scatter per poziom (0..3)")]
     public Vector2Int[] perLevelCount = new Vector2Int[]
     {
         new Vector2Int(0, 0),
@@ -22,17 +22,22 @@ public class GrassInstancedTileLayer : MonoBehaviour
         new Vector2Int(6, 10),
         new Vector2Int(10, 16),
     };
-    public Vector2 uniformScaleRange = new Vector2(0.8f, 1.2f);
+
+    [Header("Skalowanie")]
+    public Vector2 uniformScaleRange = new Vector2(0.9f, 1.3f);
 
     [Tooltip("Mnożniki skali dla poziomów 0..3.")]
     public float[] scaleMultiplierByLevel = new float[] { 0f, 1.0f, 1.2f, 1.45f };
+
+    [Header("Offset / rotacja")]
     public float yOffset = 0f;
-    public Vector3 meshRotationFixEuler = new Vector3(0,0,90);
+    public Vector3 meshRotationFixEuler = new Vector3(0, 0, 90);
     private Quaternion _meshRotationFix = Quaternion.identity;
 
     [Header("Wzrost (animacja)")]
     public float growthDuration = 0.6f;
     public float spawnStagger = 0.25f;
+
     [Tooltip("Warstwa renderu")]
     public int renderLayer = 0;
 
@@ -48,38 +53,38 @@ public class GrassInstancedTileLayer : MonoBehaviour
     private readonly Dictionary<Tile, Batch> _batches = new();
     private MaterialPropertyBlock _mpb;
 
-    void Awake()
+    private void Awake()
     {
         _mpb = new MaterialPropertyBlock();
         _meshRotationFix = Quaternion.Euler(meshRotationFixEuler);
-        if (grassPrefab && (!grassMesh || !grassMaterial))
+
+        if (bushPrefab && (!bushMesh || !bushMaterial))
         {
-            var mf = grassPrefab.GetComponentInChildren<MeshFilter>();
-            var mr = grassPrefab.GetComponentInChildren<MeshRenderer>();
-            if (mf) grassMesh = mf.sharedMesh;
-            if (mr) grassMaterial = new Material(mr.sharedMaterial);
+            var mf = bushPrefab.GetComponentInChildren<MeshFilter>();
+            var mr = bushPrefab.GetComponentInChildren<MeshRenderer>();
+            if (mf) bushMesh = mf.sharedMesh;
+            if (mr) bushMaterial = new Material(mr.sharedMaterial);
         }
 
-        if (grassMaterial) grassMaterial.enableInstancing = true;
+        if (bushMaterial) bushMaterial.enableInstancing = true;
     }
-
 
     public void RegenerateFor(Tile tile)
     {
         if (tile == null)
             return;
 
-        int levelGrass = tile.composition.levelGrass;
+        int bushLevel = tile.composition.bushLevel;
 
-        if (levelGrass <= 0)
+        if (bushLevel <= 0)
         {
             RemoveFor(tile);
             return;
         }
 
-        if (grassMesh == null || grassMaterial == null) return;
+        if (bushMesh == null || bushMaterial == null) return;
 
-        int lvl = Mathf.Clamp(levelGrass, 1, 3);
+        int lvl = Mathf.Clamp(bushLevel, 1, 3);
 
         Vector2Int countRange = (perLevelCount != null && perLevelCount.Length > lvl)
             ? perLevelCount[lvl]
@@ -96,8 +101,6 @@ public class GrassInstancedTileLayer : MonoBehaviour
             int toAdd = targetCount - existing;
             AppendInstances(tile, lvl, toAdd);
         }
-
-
     }
     private void AppendInstances(Tile tile, int lvl, int addCount)
     {
@@ -160,9 +163,9 @@ public class GrassInstancedTileLayer : MonoBehaviour
         _batches.Remove(tile);
     }
 
-    void LateUpdate()
+    private void LateUpdate()
     {
-        if (!grassMesh || !grassMaterial || _batches.Count == 0) return;
+        if (!bushMesh || !bushMaterial || _batches.Count == 0) return;
 
         float now = Time.time;
 
@@ -179,12 +182,11 @@ public class GrassInstancedTileLayer : MonoBehaviour
                 b.matrices[i] = Matrix4x4.TRS(b.pos[i], b.rot[i], new Vector3(s, s, s));
             }
 
-            // drawing 1023 batches
             for (int offset = 0; offset < total;)
             {
                 int batchCount = Mathf.Min(1023, total - offset);
                 Graphics.DrawMeshInstanced(
-                    grassMesh, 0, grassMaterial,
+                    bushMesh, 0, bushMaterial,
                     new System.ArraySegment<Matrix4x4>(b.matrices, offset, batchCount).ToArray(),
                     batchCount, _mpb,
                     UnityEngine.Rendering.ShadowCastingMode.Off, false,
@@ -196,6 +198,7 @@ public class GrassInstancedTileLayer : MonoBehaviour
         }
     }
 
+    // ——— helpers ———
     static Vector3 RandomPointInHex(Vector3 center, float radius, System.Random rng)
     {
         for (int k = 0; k < 8; k++)

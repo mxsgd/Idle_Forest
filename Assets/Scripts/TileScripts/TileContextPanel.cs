@@ -1,8 +1,6 @@
 using TMPro;
-using UnityEditor.PackageManager.Requests;
 using UnityEngine;
 using UnityEngine.UI;
-using UnityEngine.Events;
 
 [RequireComponent(typeof(CanvasGroup))]
 public class TileContextPanel : MonoBehaviour
@@ -36,22 +34,23 @@ public class TileContextPanel : MonoBehaviour
 
     private void OnEnable()
     {
-        economy = IdleEconomyManager.Instance;
+        IdleEconomyManager.InstanceChanged += OnEconomyInstanceChanged;
+        AttachEconomy(IdleEconomyManager.Instance);
 
         if (selector != null)
             selector.TileSelected += OnTileSelected;
 
-        if (economy != null)
-            economy.CurrencyChanged += OnCurrencyChanged;
+        TileEvents.CompositionChanged += OnAnyCompositionChanged;
     }
 
     private void OnDisable()
     {
+        TileEvents.CompositionChanged -= OnAnyCompositionChanged;
         if (selector != null)
             selector.TileSelected -= OnTileSelected;
 
-        if (economy != null)
-            economy.CurrencyChanged -= OnCurrencyChanged;
+        IdleEconomyManager.InstanceChanged -= OnEconomyInstanceChanged;
+        DetachEconomy();
 
         currentTile = null;
         HidePanel();
@@ -95,7 +94,6 @@ public class TileContextPanel : MonoBehaviour
     public void RequestBuild(TileBuildAction action)
     {
         HandleBuild(action);
-        Debug.Log("request clicked");
     }
 
     private void RefreshOptions()
@@ -116,12 +114,45 @@ public class TileContextPanel : MonoBehaviour
         if (label != null)
         {
             string priceText = option.cost > 0f ? option.cost.ToString("N0") : "0";
-            Debug.Log(priceText);
             if (!option.canBuild && !string.IsNullOrEmpty(option.reason))
                 priceText += $"\n{option.reason}";
 
             label.text = priceText;
         }
+    }
+    private void OnEconomyInstanceChanged(IdleEconomyManager manager)
+    {
+        AttachEconomy(manager);
+    }
+
+    private void AttachEconomy(IdleEconomyManager manager)
+    {
+        if (economy == manager)
+            return;
+
+        DetachEconomy();
+        economy = manager;
+
+        if (economy != null)
+        {
+            economy.CurrencyChanged += OnCurrencyChanged;
+            OnCurrencyChanged(economy.Currency);
+        }
+    }
+
+    private void DetachEconomy()
+    {
+        if (economy == null)
+            return;
+
+        economy.CurrencyChanged -= OnCurrencyChanged;
+        economy = null;
+    }
+
+    private void OnAnyCompositionChanged(TileGrid.Tile _, TileBuildAction __)
+    {
+        if (currentTile != null)
+            RefreshOptions();
     }
 
     private void ShowPanel()

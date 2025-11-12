@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.Tilemaps;
 
 public enum TileBuildAction
@@ -18,6 +19,7 @@ public class TileBuildController : MonoBehaviour
     [SerializeField] private TileRuntimeStore runtime;
     [SerializeField] private IdleEconomyManager economy;
     [SerializeField] private GrassInstancedTileLayer grassLayer;
+    [SerializeField] private BushInstancedTileLayer bushLayer;
     public struct TileBuildCostSettings
     {
         public TileBuildAction action;
@@ -46,19 +48,13 @@ public class TileBuildController : MonoBehaviour
     [Header("Cost settings")]
     [SerializeField] private TileBuildCostSettings[] costSettings =
     {
-        new TileBuildCostSettings(TileBuildAction.Grass, 0f, 1f),
-        new TileBuildCostSettings(TileBuildAction.Bush,  0f, 1f),
-        new TileBuildCostSettings(TileBuildAction.Tree,  0f, 1f),
+        new TileBuildCostSettings(TileBuildAction.Grass, 5, 2f),
+        new TileBuildCostSettings(TileBuildAction.Bush,  25f, 2f),
+        new TileBuildCostSettings(TileBuildAction.Tree,  200f, 2f),
     };
 
     private readonly Dictionary<TileBuildAction, TileBuildCostSettings> costLookup = new();
     private readonly HashSet<TileBuildAction> missingCostLogged = new();
-
-    [Header("Tile expansion cost")]
-    [SerializeField, Min(0f)] private float tileExpansionStartingCost = 1f;
-    [SerializeField, Min(0f)] private float tileExpansionCostMultiplier = 5f;
-
-    private static readonly TileBuildAction[] AllActions = (TileBuildAction[])Enum.GetValues(typeof(TileBuildAction));
 
     public struct TileBuildOption
     {
@@ -89,7 +85,7 @@ public class TileBuildController : MonoBehaviour
         TileBuildOption option;
         option.reason = string.Empty;
 
-        float cost = GetNextCost(action);
+        float cost;
         string reason;
         bool ok = Evaluate(tile, action, out cost, out reason);
 
@@ -136,6 +132,13 @@ public class TileBuildController : MonoBehaviour
         cost = GetNextCost(action);
 
         if (tile == null)
+        {
+            failureReason = "Brak kafla.";
+            return false;
+        }
+
+        var rt = runtime.Get(tile);
+        if(!rt.occupied)
         {
             failureReason = "Brak kafla.";
             return false;
@@ -243,6 +246,7 @@ public class TileBuildController : MonoBehaviour
             case TileBuildAction.Bush:
                 tile.composition.bushLevel = Mathf.Clamp(tile.composition.bushLevel + 1, 0, 3);
                 tile.composition.Validate();
+                bushLayer.RegenerateFor(tile);
                 break;
 
             case TileBuildAction.Tree:
