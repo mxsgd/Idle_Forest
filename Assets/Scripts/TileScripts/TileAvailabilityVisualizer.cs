@@ -29,7 +29,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     [Header("Tile Purchase (hold to buy)")]
     [SerializeField, Min(0f)] private float purchaseHoldDuration = 2f;
-    [SerializeField] private IdleEconomyManager economy;
     [SerializeField] private Transform purchasedTileParent;
     [SerializeField] private Camera purchaseCamera;
     [SerializeField] private LayerMask purchaseRaycastMask = ~0;
@@ -54,7 +53,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     private void Awake()
     {
         if (!purchaseCamera) purchaseCamera = Camera.main;
-        if (!economy) economy = IdleEconomyManager.Instance;
 
         if (!availableTileParent && grid) availableTileParent = grid.transform;
         if (!selectedTileParent && grid) selectedTileParent = grid.transform;
@@ -244,7 +242,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
             return;
         }
 
-        if (TryPurchaseHighlightedTile())
             UpdateHoldIndicator(1f);
 
         ResetPurchaseHold();
@@ -269,26 +266,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         DestroyHoldIndicator();
     }
 
-    private bool TryPurchaseHighlightedTile()
-    {
-        var tile = _highlightedTile;
-        if (tile == null || placement == null || runtime == null)
-            return false;
-
-        var rt = runtime.Get(tile);
-        if (rt.occupied) return false;
-        if (!_availableTiles.ContainsKey(tile)) return false;
-
-        var wallet = economy ?? IdleEconomyManager.Instance;
-
-        if(wallet.TryBuyNextTile())
-            placement.PlaceOccupant(tile, Quaternion.identity);
-
-        RemoveAvailableTile(tile);
-        UpdateSelectedTileHighlight(tile);
-        RefreshAvailability();
-        return true;
-    }
 
     private bool TryGetActivePointer(out Vector2 position, out int pointerId)
     {

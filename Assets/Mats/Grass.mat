@@ -8,17 +8,18 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Grass
-  m_Shader: {fileID: 4800000, guid: 933532a4fcc9baf4fa0491de14d08ed7, type: 3}
+  m_Shader: {fileID: 4800000, guid: 99a4bc8cd10de6548986e6a26a1f49bd, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
-  m_InvalidKeywords: []
+  m_InvalidKeywords:
+  - _ALPHATEST_ON
+  - _NORMALMAP
   m_LightmapFlags: 4
-  m_EnableInstancingVariants: 0
+  m_EnableInstancingVariants: 1
   m_DoubleSidedGI: 1
   m_CustomRenderQueue: -1
-  stringTagMap:
-    RenderType: Opaque
+  stringTagMap: {}
   disabledShaderPasses:
   - MOTIONVECTORS
   m_LockedProperties: 
@@ -30,7 +31,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 97f9bf88b9cee7647af21e8338ef1b57, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _DetailAlbedoMap:
@@ -84,15 +85,16 @@ Material:
     m_Ints: []
     m_Floats:
     - _AddPrecomputedVelocity: 0
-    - _AlphaClip: 0
-    - _AlphaToMask: 0
+    - _AlphaClip: 1
+    - _AlphaToMask: 1
     - _Blend: 0
     - _BlendModePreserveSpecular: 1
-    - _BumpScale: 1
+    - _BlendOp: 0
+    - _BumpScale: 0.1
     - _ClearCoatMask: 0
     - _ClearCoatSmoothness: 0
     - _Cull: 0
-    - _Cutoff: 0.5
+    - _Cutoff: 0.211
     - _DetailAlbedoMapScale: 1
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
@@ -102,24 +104,29 @@ Material:
     - _Glossiness: 0
     - _GlossyReflections: 0
     - _Metallic: 0
+    - _MinLight: 0.255
     - _OcclusionStrength: 1
     - _Parallax: 0.005
     - _QueueOffset: 0
     - _ReceiveShadows: 1
-    - _Smoothness: 0.361
+    - _Smoothness: 0.006
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
     - _SrcBlendAlpha: 1
+    - _Steps: 2.9
     - _Surface: 0
+    - _WindSpeed: 0
+    - _WindStrength: 0
     - _WorkflowMode: 1
     - _XRMotionVectorsPass: 1
     - _ZWrite: 1
     m_Colors:
-    - _BaseColor: {r: 0.32138783, g: 0.6698113, b: 0.28751335, a: 1}
-    - _Color: {r: 0.3213878, g: 0.6698113, b: 0.28751332, a: 1}
+    - _BaseColor: {r: 0.27671528, g: 0.5849056, b: 0.24554999, a: 1}
+    - _Color: {r: 0.27671525, g: 0.5849056, b: 0.24554992, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _SpecColor: {r: 0.71687526, g: 0.8867924, b: 0.7152901, a: 1}
+    - _WindFrequency: {r: 0.4, g: 0, b: 0.45, a: 0}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
 --- !u!114 &1679181828580480924
