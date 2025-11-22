@@ -13170,7 +13170,7 @@ MonoBehaviour:
   availabilityParent: {fileID: 830910582}
   availabilityPrefab: {fileID: 1038446933378722548, guid: 87787cb8a807a8c49a6832f677e75aae, type: 3}
   availabilitySelectedTilePrefab: {fileID: 1038446933378722548, guid: 3f85c8aad2f5bb046b21439d1c7525a7, type: 3}
-  occupantPrefab: {fileID: 1038446933378722548, guid: b1ed3dd3be323794db3959d124005c1e, type: 3}
+  occupantPrefab: {fileID: 7382264111942074979, guid: b7ceeec9c8817994c8880ae967b8e359, type: 3}
   occupantOffset: {x: 0, y: 1, z: 0}
   availabilityOffset: {x: 0, y: 1, z: 0}
 --- !u!114 &1211946169
@@ -13385,7 +13385,14 @@ MonoBehaviour:
   rebuildOnStart: 1
   tileGroups:
   - tileType: 0
-    prefabs: []
+    prefabs:
+    - {fileID: 919132149155446097, guid: 6e0c011733984d84cba680df02c89552, type: 3}
+    icon: {fileID: 0}
+    displayName: 
+  - tileType: 1
+    prefabs:
+    - {fileID: 7382264111942074979, guid: 634acb41ae617244c8ba7cc53da70e54, type: 3}
+    - {fileID: 7382264111942074979, guid: eb44ac77a8d5626438c41752dd640f0f, type: 3}
     icon: {fileID: 0}
     displayName: 
 --- !u!1 &1610150177
