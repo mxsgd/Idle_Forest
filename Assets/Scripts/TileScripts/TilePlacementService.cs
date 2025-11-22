@@ -12,17 +12,19 @@ public class TilePlacementService : MonoBehaviour
     [SerializeField] private GameObject occupantPrefab;
     [SerializeField] private Vector3 occupantOffset = new(0, 1f, 0);
     [SerializeField] private Vector3 availabilityOffset = new(0, 1f, 0);
-
     public GameObject PlaceOccupant(Tile tile, Quaternion rotation)
+        => PlaceOccupant(tile, rotation, null);
+    public GameObject PlaceOccupant(Tile tile, Quaternion rotation, TileDraw tileDraw)
     {
+        var prefab = tileDraw != null ? tileDraw.prefab : occupantPrefab;
         if (tile == null || occupantPrefab == null) return null;
         var r = runtimeStore.Get(tile);
         if (r.occupied) return null;
 
-        RemoveAvailability(tile); // jak u Ciebie
+        RemoveAvailability(tile);
         var pos = tile.worldPos + occupantOffset;
         var go = Instantiate(occupantPrefab, pos, rotation, occupantsParent);
-        runtimeStore.MarkOccupied(tile, go, occupantPrefab);
+        runtimeStore.MarkOccupied(tile, go, prefab, tileDraw);
         return go;
     }
 

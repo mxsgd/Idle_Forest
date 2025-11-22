@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -13,7 +12,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     [SerializeField] private TileSelectionModel selection;
     [SerializeField] private TileQueryService query;
     [SerializeField] private TileRuntimeStore runtime;
-
+    [SerializeField] private TileDeck tileDeck;
 
     [Header("Available Tiles (ghost)")]
     [SerializeField] private Transform availableTileParent;
@@ -27,15 +26,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     [SerializeField] private string selectedTag = "";
 
 
-    [Header("Tile Purchase (hold to buy)")]
-    [SerializeField, Min(0f)] private float purchaseHoldDuration = 2f;
-    [SerializeField] private Transform purchasedTileParent;
-    [SerializeField] private Camera purchaseCamera;
-    [SerializeField] private LayerMask purchaseRaycastMask = ~0;
-    [SerializeField] private float purchaseRaycastDistance = 500f;
-    [SerializeField] private Vector3 holdProgressOffset = new Vector3(0f, 1.1f, 0f);
-    [SerializeField] private GameObject holdProgressPrefab;
-
     private readonly Dictionary<TileGrid.Tile, GameObject> _availableTiles = new Dictionary<TileGrid.Tile, GameObject>();
     private readonly List<TileGrid.Tile> _removalBuffer = new List<TileGrid.Tile>();
 
@@ -43,20 +33,13 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     private GameObject _selectedTileInstance;
 
     private const int MousePointerId = -1;
-    private bool _isHoldingToPurchase;
-    private float _holdTimer;
-    private int _activePointerId = int.MinValue;
-    private GameObject _holdProgressInstance;
-    private HoldProgressIndicator _holdProgressIndicator;
-    private Vector3 _holdProgressBaseScale = Vector3.one;
+    private bool _deckDepleted;
 
     private void Awake()
     {
-        if (!purchaseCamera) purchaseCamera = Camera.main;
 
         if (!availableTileParent && grid) availableTileParent = grid.transform;
         if (!selectedTileParent && grid) selectedTileParent = grid.transform;
-        if (!purchasedTileParent && grid) purchasedTileParent = grid.transform;
 
         if (!availability)     availability  = FindAnyObjectByType<TileAvailabilityService>();
         if (!placement)        placement     = FindAnyObjectByType<TilePlacementService>();
@@ -64,6 +47,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         if (!query)            query         = FindAnyObjectByType<TileQueryService>();
         if (!runtime)          runtime       = FindAnyObjectByType<TileRuntimeStore>();
         if (!grid)             grid          = FindAnyObjectByType<TileGrid>();
+        if (!tileDeck)         tileDeck      = FindAnyObjectByType<TileDeck>();
     }
 
     private void OnEnable()
@@ -71,6 +55,8 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         if (selection != null)
             selection.SelectionChanged += OnSelectionChanged;
 
+        if (tileDeck != null)
+            tileDeck.DeckEmptied += OnDeckEmptied;
         RefreshAvailability();
         UpdateSelectedTileHighlight(selection != null ? selection.Selected : null);
     }
@@ -85,15 +71,15 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     {
         if (selection != null)
             selection.SelectionChanged -= OnSelectionChanged;
-
+        if (tileDeck != null)
+            tileDeck.DeckEmptied -= OnDeckEmptied;
         ClearAvailableTiles();
         ClearSelectedTileHighlight();
-        ResetPurchaseHold();
     }
 
     private void Update()
     {
-        UpdatePurchaseHold();
+        TryPlaceHighlightedTile();
     }
 
     private void OnSelectionChanged(TileGrid.Tile tile)
@@ -161,8 +147,6 @@ public class TileAvailabilityVisualizer : MonoBehaviour
     {
         if (tile == _highlightedTile) return;
 
-        ResetPurchaseHold();
-
         if (_highlightedTile != null)
         {
             placement?.RemoveAvailability(_highlightedTile);
@@ -186,6 +170,7 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
         _highlightedTile = tile;
     }
+
     private void ClearSelectedTileHighlight()
     {
         if (_highlightedTile != null)
@@ -194,80 +179,53 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         _highlightedTile = null;
     }
 
-    private void UpdatePurchaseHold()
+    private void TryPlaceHighlightedTile()
     {
-        if (!isActiveAndEnabled || !Application.isPlaying)
-        {
-            ResetPurchaseHold();
+        if (!isActiveAndEnabled || !Application.isPlaying || _deckDepleted)
             return;
-        }
+        
 
-        if (_highlightedTile == null || purchaseHoldDuration <= 0f)
-        {
-            ResetPurchaseHold();
+        if (_highlightedTile == null)
             return;
-        }
 
-        if (!TryGetActivePointer(out var pointerPosition, out var pointerId))
-        {
-            ResetPurchaseHold();
+        if (!TryGetPointerDown(out var position, out var pointerId))
             return;
-        }
 
         if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId))
-        {
-            ResetPurchaseHold();
             return;
-        }
-
-        if (!IsPointerOverHighlightedTile(pointerPosition))
-        {
-            ResetPurchaseHold();
-            return;
-        }
-
-        if (!_isHoldingToPurchase)
-            BeginPurchaseHold(pointerId);
-
-        if (!_isHoldingToPurchase)
+        if (!IsPointerOverHighlightedTile(position))
             return;
 
-        _holdTimer += Time.deltaTime;
-        float progress = Mathf.Clamp01(_holdTimer / purchaseHoldDuration);
-        UpdateHoldIndicator(progress);
-
-        if (_holdTimer < purchaseHoldDuration)
-        {
-            UpdateHoldIndicatorPosition();
+        if (placement == null)
             return;
-        }
 
-            UpdateHoldIndicator(1f);
+        var rotation = grid ? grid.transform.rotation : Quaternion.identity;
+        var draw = tileDeck != null ? tileDeck.DrawTile() : null;
+        if (tileDeck != null && draw == null)
+            return;
+            var instance = placement.PlaceOccupant(_highlightedTile, rotation, draw);
+        if (instance == null)
+            return;
 
-        ResetPurchaseHold();
+        selection?.ClearSelectedTile();
+        RefreshAvailability();
+    
     }
 
-    private void BeginPurchaseHold(int pointerId)
+    private bool IsPointerOverHighlightedTile(Vector2 screenPosition)
     {
-        if (_highlightedTile == null) return;
+        var camera = Camera.main;
+        if (!camera || query == null) return false;
+        var ray = camera.ScreenPointToRay(screenPosition);
+        if (!Physics.Raycast(ray, out var hit, 500f, ~0, QueryTriggerInteraction.Ignore))
+            return false;
+            
+        if (!query.TryGetNearestTile(hit.point, out var tile, 500f))
+            return false;
 
-        _isHoldingToPurchase = true;
-        _holdTimer = 0f;
-        _activePointerId = pointerId;
-        CreateHoldIndicator();
-        UpdateHoldIndicator(0f);
-        UpdateHoldIndicatorPosition();
+        return tile == _highlightedTile;
     }
-    private void ResetPurchaseHold()
-    {
-        _isHoldingToPurchase = false;
-        _holdTimer = 0f;
-        _activePointerId = int.MinValue;
-        DestroyHoldIndicator();
-    }
-
-
-    private bool TryGetActivePointer(out Vector2 position, out int pointerId)
+    private bool TryGetPointerDown(out Vector2 position, out int pointerId)
     {
         position = default;
         pointerId = int.MinValue;
@@ -277,93 +235,33 @@ public class TileAvailabilityVisualizer : MonoBehaviour
         {
             foreach (var touch in ts.touches)
             {
-                if (touch == null || !touch.press.isPressed) continue;
+                if (touch == null || !touch.press.wasPressedThisFrame) continue;
                 position = touch.position.ReadValue();
                 pointerId = touch.touchId.ReadValue();
-                if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
+                return true;
             }
         }
-
         var mouse = Mouse.current;
-        if (mouse != null && mouse.leftButton.isPressed)
+        if (mouse != null && mouse.leftButton.wasPressedThisFrame)
         {
             position = mouse.position.ReadValue();
             pointerId = MousePointerId;
-            if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
+            return true;
         }
-
         var pen = Pen.current;
-        if (pen != null && pen.tip.isPressed)
+        if (pen != null && pen.tip.wasPressedThisFrame)
         {
             position = pen.position.ReadValue();
             pointerId = MousePointerId;
-            if (!_isHoldingToPurchase || pointerId == _activePointerId) return true;
+            return true;
         }
-
         return false;
     }
-
-    private bool IsPointerOverHighlightedTile(Vector2 screenPosition)
+    private void OnDeckEmptied()
     {
-        if (!purchaseCamera) purchaseCamera = Camera.main;
-        if (!purchaseCamera || query == null) return false;
-
-        var ray = purchaseCamera.ScreenPointToRay(screenPosition);
-        if (!Physics.Raycast(ray, out var hit, purchaseRaycastDistance, purchaseRaycastMask, QueryTriggerInteraction.Ignore))
-            return false;
-
-        if (!query.TryGetNearestTile(hit.point, out var tile, purchaseRaycastDistance))
-            return false;
-
-        return tile == _highlightedTile;
-    }
-
-    private void CreateHoldIndicator()
-    {
-        DestroyHoldIndicator();
-        if (!holdProgressPrefab) return;
-
-        var parent = selectedTileParent ? selectedTileParent : grid ? grid.transform : null;
-        if (!parent) return;
-
-        var pos = _highlightedTile != null ? _highlightedTile.worldPos + holdProgressOffset : Vector3.zero;
-        _holdProgressInstance = Instantiate(holdProgressPrefab, pos, Quaternion.identity, parent);
-        _holdProgressIndicator = _holdProgressInstance.GetComponentInChildren<HoldProgressIndicator>();
-        if (_holdProgressIndicator == null)
-            _holdProgressIndicator = _holdProgressInstance.GetComponent<HoldProgressIndicator>();
-
-        if (_holdProgressInstance) _holdProgressBaseScale = _holdProgressInstance.transform.localScale;
-    }
-
-
-    private void DestroyHoldIndicator()
-    {
-        if (!_holdProgressInstance) return;
-        if (Application.isPlaying) Destroy(_holdProgressInstance); else DestroyImmediate(_holdProgressInstance);
-        _holdProgressInstance = null;
-        _holdProgressIndicator = null;
-    }
-
-    private void UpdateHoldIndicator(float progress)
-    {
-        progress = Mathf.Clamp01(progress);
-
-        if (_holdProgressIndicator != null)
-        {
-            _holdProgressIndicator.SetProgress(progress);
-            return;
-        }
-
-        if (_holdProgressInstance != null)
-        {
-            var targetScale = _holdProgressBaseScale * Mathf.Max(0.0001f, progress);
-            _holdProgressInstance.transform.localScale = targetScale;
-        }
-    }
-
-    private void UpdateHoldIndicatorPosition()
-    {
-        if (!_holdProgressInstance || _highlightedTile == null) return;
-        _holdProgressInstance.transform.position = _highlightedTile.worldPos + holdProgressOffset;
+        _deckDepleted = true;
+        ClearSelectedTileHighlight();
+        ClearAvailableTiles();
+        enabled = false;
     }
 }

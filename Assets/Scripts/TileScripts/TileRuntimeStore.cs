@@ -11,6 +11,8 @@ public class TileRuntimeStore : MonoBehaviour
         public GameObject occupantInstance;
         public GameObject availabilityInstance;
         public GameObject templatePrefab;
+        public TileDraw tileDraw;
+        public TileType tileType = TileType.Field;
     }
 
     private readonly Dictionary<Tile, Runtime> _map = new();
@@ -23,7 +25,7 @@ public class TileRuntimeStore : MonoBehaviour
         return r;
     }
     public int OccupiedCount => _occupiedCount;
-    public void MarkOccupied(Tile t, GameObject inst, GameObject template = null)
+    public void MarkOccupied(Tile t, GameObject inst, GameObject template = null, TileDraw tileDraw = null)
     {
         var r = Get(t);
         if (!r.occupied) _occupiedCount++;
@@ -31,6 +33,13 @@ public class TileRuntimeStore : MonoBehaviour
         r.available = false;
         r.occupantInstance = inst;
         if (template) r.templatePrefab = template;
+        if (tileDraw != null)
+        {
+            r.tileDraw = tileDraw;
+            r.tileType = tileDraw.tileType;
+            if (!template && tileDraw.prefab)
+                r.templatePrefab = tileDraw.prefab;
+        }
     }
 
     public void Free(Tile t)
@@ -39,6 +48,7 @@ public class TileRuntimeStore : MonoBehaviour
         if (r.occupied && _occupiedCount > 0) _occupiedCount--;
         r.occupied = false;
         r.available = true;
+        r.tileDraw = null;
         r.occupantInstance = null;
     }
 
