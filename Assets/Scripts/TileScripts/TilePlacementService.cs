@@ -17,13 +17,13 @@ public class TilePlacementService : MonoBehaviour
     public GameObject PlaceOccupant(Tile tile, Quaternion rotation, TileDraw tileDraw)
     {
         var prefab = tileDraw != null ? tileDraw.prefab : occupantPrefab;
-        if (tile == null || occupantPrefab == null) return null;
+        if (tile == null || prefab == null) return null;
         var r = runtimeStore.Get(tile);
         if (r.occupied) return null;
 
         RemoveAvailability(tile);
         var pos = tile.worldPos + occupantOffset;
-        var go = Instantiate(occupantPrefab, pos, rotation, occupantsParent);
+        var go = Instantiate(prefab, pos, rotation, occupantsParent);
         runtimeStore.MarkOccupied(tile, go, prefab, tileDraw);
         return go;
     }

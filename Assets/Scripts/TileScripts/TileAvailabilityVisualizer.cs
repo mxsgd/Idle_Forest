@@ -145,6 +145,15 @@ public class TileAvailabilityVisualizer : MonoBehaviour
 
     private void UpdateSelectedTileHighlight(TileGrid.Tile tile)
     {
+        if (tile != null)
+        {
+            var runtimeTile = runtime?.Get(tile);
+            if (runtimeTile == null || runtimeTile.occupied || !runtimeTile.available)
+            {
+                selection?.ClearSelectedTile();
+                tile = null;
+            }
+        }
         if (tile == _highlightedTile) return;
 
         if (_highlightedTile != null)
@@ -197,6 +206,10 @@ public class TileAvailabilityVisualizer : MonoBehaviour
             return;
 
         if (placement == null)
+            return;
+
+        var runtimeTile = runtime?.Get(_highlightedTile);
+        if (runtimeTile == null || runtimeTile.occupied || !runtimeTile.available)
             return;
 
         var rotation = grid ? grid.transform.rotation : Quaternion.identity;

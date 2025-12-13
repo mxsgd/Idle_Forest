@@ -4,6 +4,7 @@ using UnityEngine;
 [ExecuteAlways]
 [RequireComponent(typeof(MeshFilter))]
 [RequireComponent(typeof(Collider))]
+
 public class TileGrid : MonoBehaviour
 {
     [Header("Grid")]
