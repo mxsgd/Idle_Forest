@@ -8,6 +8,7 @@ public enum TileType
     Field,
     Bushes,
     Forest,
+    Rocks,
     Water
 }
 
@@ -112,6 +113,7 @@ public class TileDeck : MonoBehaviour
         {
             TileType.Field => "Pole",
             TileType.Bushes => "Krzaki",
+            TileType.Rocks => "Skały",
             TileType.Forest => "Las",
             TileType.Water => "Woda",
             _ => type.ToString()

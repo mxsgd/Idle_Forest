@@ -6,7 +6,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private TileGrid tileGrid;
     [SerializeField] private TilePlacementService placement;
     [SerializeField] private TileRuntimeStore runtime;
-
+    [SerializeField] public AnimalSequenceService sequence;
     [Header("Starting Tile")]
     [SerializeField] private bool placeStartingTileOnStart = true;
 

@@ -69,14 +69,6 @@ public class TilePlacementService : MonoBehaviour
         r.available = false;
     }
 
-    public void RemoveOccupant(Tile tile)
-    {
-        var r = runtimeStore.Get(tile);
-        if (r?.occupantInstance == null) return;
-        Destroy(r.occupantInstance);
-        r.occupantInstance = null;
-        runtimeStore.Free(tile);
-    }
 
     private static void ConfigureAvailabilityInstance(GameObject instance, float alpha, string tag)
     {

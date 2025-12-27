@@ -18,17 +18,15 @@ public class TileGrid : MonoBehaviour
         public int i, j;
         public int q, r;
         public Vector3 worldPos;
+        public BiomeCode biome = BiomeCode.Plain;
+        public Tile[] neighbors = new Tile[6];
     }
 
     public List<Tile> tiles = new List<Tile>();
     private Tile[,] _grid;
     private readonly Dictionary<Vector2Int, Tile> _axialLookup = new Dictionary<Vector2Int, Tile>();
     private Tile _centerTile;
-    private static readonly Vector2Int[] AxialDirections =
-    {
-        new(1, 0), new(1, -1), new(0, -1),
-        new(-1, 0), new(-1, 1), new(0, 1)
-    };
+    public static readonly Vector2Int[] AxialDirections = BiomeCodeUtility.AxialDirections;
 
     private float _hexScale = 1f;
     private Bounds _localBounds;
@@ -124,6 +122,16 @@ public class TileGrid : MonoBehaviour
                     _centerTile = t;
                 }
             }
+            
+        foreach (var tile in tiles)
+        {
+            for (int dir = 0; dir < AxialDirections.Length; dir++)
+            {
+                var offset = AxialDirections[dir];
+                var key = new Vector2Int(tile.q + offset.x, tile.r + offset.y);
+                tile.neighbors[dir] = _axialLookup.TryGetValue(key, out var neighbor) ? neighbor : null;
+            }
+        }
     }
     public Tile GetTile(int i, int j) => (i >= 0 && i < rows && j >= 0 && j < cols) ? _grid[i, j] : null;
 
@@ -132,12 +140,10 @@ public class TileGrid : MonoBehaviour
         if (tile == null)
             yield break;
 
-        foreach (var dir in AxialDirections)
-        {
-            var key = new Vector2Int(tile.q + dir.x, tile.r + dir.y);
-            if (_axialLookup.TryGetValue(key, out var neighbor))
+        foreach (var neighbor in tile.neighbors)
+            if (neighbor != null)
                 yield return neighbor;
-        }
+        
     }
     public Tile GetCenterTile() => _centerTile;
 }

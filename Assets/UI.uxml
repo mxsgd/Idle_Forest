@@ -1,0 +1,6 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <ui:VisualElement name="Container" style="flex-grow: 1; bottom: 4px; width: 250px; height: 466px; right: -4px; flex-direction: row; align-self: flex-start; position: absolute; top: auto;" />
+    <ui:VisualElement name="Score" style="flex-grow: 1; left: 0; position: absolute; height: 97px; width: 725px;">
+        <ui:Label data-source-type="System.Data.SqlClient.SysTxForGlobalTransactions+&lt;&gt;c, System.Data" name="Value" style="height: 94px; width: 320px; left: auto; top: auto; align-self: center; font-size: 38px; -unity-text-align: middle-center; -unity-font-definition: url(&quot;project://database/Assets/UI%20Toolkit/UnityThemes/UnityDefaultRuntimeTheme.tss?fileID=2230732570650464555&amp;guid=68a64bd902ffe0f48b5b582737532d4f&amp;type=3#NotInter-Regular&quot;);" />
+    </ui:VisualElement>
+</ui:UXML>

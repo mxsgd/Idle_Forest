@@ -13,6 +13,7 @@ public class TileRuntimeStore : MonoBehaviour
         public GameObject templatePrefab;
         public TileDraw tileDraw;
         public TileType tileType = TileType.Field;
+        public BiomeCode biomeCode = BiomeCode.Plain;
     }
 
     private readonly Dictionary<Tile, Runtime> _map = new();
@@ -40,16 +41,8 @@ public class TileRuntimeStore : MonoBehaviour
             if (!template && tileDraw.prefab)
                 r.templatePrefab = tileDraw.prefab;
         }
-    }
-
-    public void Free(Tile t)
-    {
-        var r = Get(t);
-        if (r.occupied && _occupiedCount > 0) _occupiedCount--;
-        r.occupied = false;
-        r.available = true;
-        r.tileDraw = null;
-        r.occupantInstance = null;
+        r.biomeCode = r.tileType.ToBiomeCode();
+        t.biome = r.biomeCode;
     }
 
 }
